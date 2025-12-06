@@ -8,11 +8,18 @@ crate-type = ["cdylib"]
 
 [dependencies]
 candid = "0.10"
-ic-cdk = "0.13"
-ic-cdk-macros = "0.13"
+ic-cdk = "0.16"
+ic-cdk-macros = "0.16"
+ic-cdk-timers = "0.10"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+hex = "0.4"
 
-# For ic-alloy integration (will add later in Week 3)
-# alloy = { git = "https://github.com/ic-alloy/ic-alloy.git", tag = "v0.3.5-icp.1", features = ["icp"] }
-# getrandom = { version = "0.2.15", features = ["custom"] }
+# ic-alloy for Ethereum/EVM integration
+alloy = { git = "https://github.com/ic-alloy/ic-alloy.git", tag = "v0.3.5-icp.0", features = ["icp", "sol-types"] }
+getrandom = { version = "0.2.15", features = ["custom"] }
+
+# Additional alloy utilities
+alloy-signer = { git = "https://github.com/ic-alloy/ic-alloy.git", tag = "v0.3.5-icp.0" }
+alloy-provider = { git = "https://github.com/ic-alloy/ic-alloy.git", tag = "v0.3.5-icp.0" }
+alloy-transport = { git = "https://github.com/ic-alloy/ic-alloy.git", tag = "v0.3.5-icp.0" }

@@ -8,25 +8,42 @@ mod access_control;
 mod threshold;
 mod audit;
 mod errors;
+mod executor;
 
 use types::*;
 use access_control::AccessControl;
 use threshold::ThresholdSigner;
 use audit::AuditLog;
+use executor::ChainExecutor;
 
 thread_local! {
     static STATE: RefCell<ChainGuardState> = RefCell::new(ChainGuardState::default());
 }
 
-#[derive(Default)]
 struct ChainGuardState {
     config: Option<ChainGuardConfig>,
     access_control: AccessControl,
     threshold_signer: ThresholdSigner,
     audit_log: AuditLog,
+    executor: ChainExecutor,
     paused: bool,
     daily_volume: u64,
     last_reset: u64,
+}
+
+impl Default for ChainGuardState {
+    fn default() -> Self {
+        Self {
+            config: None,
+            access_control: AccessControl::default(),
+            threshold_signer: ThresholdSigner::default(),
+            audit_log: AuditLog::default(),
+            executor: ChainExecutor::default(),
+            paused: false,
+            daily_volume: 0,
+            last_reset: 0,
+        }
+    }
 }
 
 // ============== INITIALIZATION ==============
@@ -188,17 +205,18 @@ async fn request_action(action: Action) -> ActionResult {
     let caller = ic_cdk::caller();
     let current_time = time();
 
-    STATE.with(|state| {
+    // Evaluate policy and create audit entry
+    let (decision, audit_id_opt) = STATE.with(|state| {
         let mut state = state.borrow_mut();
 
         // Check if paused
         if state.paused {
-            return ActionResult::Denied { reason: "System is paused".to_string() };
+            return (None, None);
         }
 
         // Check permission
         if !state.access_control.has_permission(&caller, &Permission::Execute) {
-            return ActionResult::Denied { reason: "No execute permission".to_string() };
+            return (None, None);
         }
 
         // Evaluate policies
@@ -206,12 +224,10 @@ async fn request_action(action: Action) -> ActionResult {
 
         match policy_result.decision {
             PolicyDecision::Denied => {
-                // Log and deny
                 state.audit_log.log_action(&action, caller, policy_result.clone(), None, current_time);
-                ActionResult::Denied { reason: policy_result.reason }
+                (Some(PolicyDecision::Denied), None)
             }
             PolicyDecision::RequiresThreshold => {
-                // Create pending request
                 let required_sigs = state.config.as_ref().unwrap().default_threshold.required;
                 let request = state.threshold_signer.create_request(
                     action.clone(),
@@ -219,27 +235,49 @@ async fn request_action(action: Action) -> ActionResult {
                     required_sigs,
                     current_time,
                 );
-
                 state.audit_log.log_action(&action, caller, policy_result, Some(request.id), current_time);
-                ActionResult::PendingSignatures(request)
+                (Some(PolicyDecision::RequiresThreshold), Some(request.id))
             }
             PolicyDecision::Allowed => {
-                // Log the action
                 let audit_id = state.audit_log.log_action(&action, caller, policy_result, None, current_time);
-
-                // TODO: Execute via ic-alloy (Week 3)
-                let result = ExecutionResult {
-                    success: true,
-                    chain: "ethereum".to_string(),
-                    tx_hash: Some("0x...mock".to_string()),
-                    error: None,
-                };
-
-                let _ = state.audit_log.update_execution_result(audit_id, result.clone());
-                ActionResult::Executed(result)
+                (Some(PolicyDecision::Allowed), Some(audit_id))
             }
         }
-    })
+    });
+
+    // Handle paused state
+    if decision.is_none() {
+        return ActionResult::Denied { reason: "System is paused or no permission".to_string() };
+    }
+
+    match decision.unwrap() {
+        PolicyDecision::Denied => {
+            ActionResult::Denied { reason: "Policy denied".to_string() }
+        }
+        PolicyDecision::RequiresThreshold => {
+            let request = STATE.with(|state| {
+                state.borrow().threshold_signer.get_request(audit_id_opt.unwrap()).cloned()
+            });
+            ActionResult::PendingSignatures(request.unwrap())
+        }
+        PolicyDecision::Allowed => {
+            // Clone executor to avoid borrow issues across await
+            let executor = STATE.with(|state| {
+                state.borrow().executor.clone()
+            });
+
+            // Execute action using ChainExecutor
+            let result = executor.execute_action(&action).await;
+
+            // Update audit log with execution result
+            STATE.with(|state| {
+                let mut state = state.borrow_mut();
+                let _ = state.audit_log.update_execution_result(audit_id_opt.unwrap(), result.clone());
+            });
+
+            ActionResult::Executed(result)
+        }
+    }
 }
 
 // ============== THRESHOLD SIGNING ==============
@@ -256,24 +294,57 @@ async fn sign_request(request_id: u64) -> Result<PendingRequest, String> {
     let caller = ic_cdk::caller();
     let current_time = time();
 
-    STATE.with(|state| {
+    // Sign the request and check if approved
+    let (request_opt, action_opt) = STATE.with(|state| {
         let mut state = state.borrow_mut();
 
         // Check permission
         if !state.access_control.has_permission(&caller, &Permission::Sign) {
-            return Err("No sign permission".to_string());
+            return (None, None);
         }
 
-        let request = state.threshold_signer.sign_request(request_id, caller, current_time)?;
-
-        // If approved, execute
-        if request.status == RequestStatus::Approved {
-            // TODO: Execute the action via ic-alloy (Week 3)
-            state.threshold_signer.mark_executed(request_id)?;
+        match state.threshold_signer.sign_request(request_id, caller, current_time) {
+            Ok(request) => {
+                if request.status == RequestStatus::Approved {
+                    // Extract action for execution
+                    (Some(request.clone()), Some(request.action.clone()))
+                } else {
+                    (Some(request), None)
+                }
+            }
+            Err(_) => (None, None),
         }
+    });
 
-        Ok(request)
-    })
+    let request = request_opt.ok_or("Failed to sign request or no permission".to_string())?;
+
+    // If approved, execute the action
+    if let Some(action) = action_opt {
+        // Clone executor to avoid borrow issues across await
+        let executor = STATE.with(|state| {
+            state.borrow().executor.clone()
+        });
+
+        // Execute action using ChainExecutor
+        let execution_result = executor.execute_action(&action).await;
+
+        // Mark as executed and update audit log
+        STATE.with(|state| {
+            let mut state = state.borrow_mut();
+            let _ = state.threshold_signer.mark_executed(request_id);
+
+            // Find and update the corresponding audit entry
+            // (audit entry was created when threshold request was made)
+            if let Some(audit_entry) = state.audit_log.get_entries(None, None)
+                .iter()
+                .find(|e| e.threshold_request_id == Some(request_id))
+            {
+                let _ = state.audit_log.update_execution_result(audit_entry.id, execution_result);
+            }
+        });
+    }
+
+    Ok(request)
 }
 
 #[update]
