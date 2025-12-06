@@ -39,7 +39,8 @@ pub struct Policy {
 
 #[derive(CandidType, Deserialize, Serialize, Clone, Debug)]
 pub enum Condition {
-    MaxAmount(u64),                    // Max amount per transaction
+    MaxAmount(u64),                    // Max amount per transaction (for Allow/RequireThreshold)
+    MinAmount(u64),                    // Min amount per transaction (for Deny)
     DailyLimit(u64),                   // Max daily volume
     AllowedTokens(Vec<String>),        // Whitelist of token addresses
     AllowedChains(Vec<String>),        // Whitelist of chains

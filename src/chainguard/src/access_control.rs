@@ -94,6 +94,11 @@ impl AccessControl {
                         return false;
                     }
                 }
+                Condition::MinAmount(min) => {
+                    if amount < *min {
+                        return false;
+                    }
+                }
                 Condition::DailyLimit(limit) => {
                     if daily_spent + amount > *limit {
                         return false;

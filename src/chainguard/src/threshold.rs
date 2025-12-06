@@ -5,7 +5,7 @@ use std::collections::HashMap;
 pub struct ThresholdSigner {
     pending_requests: HashMap<u64, PendingRequest>,
     next_id: u64,
-    default_expiry: u64,  // seconds
+    default_expiry: u64,  // nanoseconds
 }
 
 impl ThresholdSigner {
@@ -13,7 +13,7 @@ impl ThresholdSigner {
         Self {
             pending_requests: HashMap::new(),
             next_id: 0,
-            default_expiry: 86400,  // 24 hours
+            default_expiry: 86400 * 1_000_000_000,  // 24 hours in nanoseconds
         }
     }
 

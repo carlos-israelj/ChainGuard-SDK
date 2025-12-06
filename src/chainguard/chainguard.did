@@ -103,6 +103,7 @@ type Policy = record {
 
 type Condition = variant {
     MaxAmount : nat64;
+    MinAmount : nat64;
     DailyLimit : nat64;
     AllowedTokens : vec text;
     AllowedChains : vec text;
