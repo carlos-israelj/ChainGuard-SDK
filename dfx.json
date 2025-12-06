@@ -1,0 +1,15 @@
+{
+  "canisters": {
+    "chainguard": {
+      "type": "rust",
+      "candid": "src/chainguard/chainguard.did",
+      "package": "chainguard"
+    }
+  },
+  "defaults": {
+    "build": {
+      "packtool": ""
+    }
+  },
+  "version": 1
+}

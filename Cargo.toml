@@ -1,0 +1,5 @@
+[workspace]
+members = [
+    "src/chainguard",
+]
+resolver = "2"

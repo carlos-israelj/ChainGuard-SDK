@@ -1,0 +1,161 @@
+type Role = variant {
+    Owner;
+    Operator;
+    Viewer;
+};
+
+type Permission = variant {
+    Execute;
+    Configure;
+    ViewLogs;
+    Sign;
+    Emergency;
+};
+
+type Action = variant {
+    Swap : record {
+        chain : text;
+        token_in : text;
+        token_out : text;
+        amount_in : nat64;
+        min_amount_out : nat64;
+    };
+    Transfer : record {
+        chain : text;
+        token : text;
+        to : text;
+        amount : nat64;
+    };
+    ApproveToken : record {
+        chain : text;
+        token : text;
+        spender : text;
+        amount : nat64;
+    };
+};
+
+type ActionResult = variant {
+    Executed : ExecutionResult;
+    PendingSignatures : PendingRequest;
+    Denied : record { reason : text };
+};
+
+type ExecutionResult = record {
+    success : bool;
+    chain : text;
+    tx_hash : opt text;
+    error : opt text;
+};
+
+type PendingRequest = record {
+    id : nat64;
+    action : Action;
+    requester : principal;
+    created_at : nat64;
+    expires_at : nat64;
+    required_signatures : nat8;
+    collected_signatures : vec Signature;
+    status : RequestStatus;
+};
+
+type Signature = record {
+    signer : principal;
+    signed_at : nat64;
+};
+
+type RequestStatus = variant {
+    Pending;
+    Approved;
+    Executed;
+    Expired;
+    Rejected;
+};
+
+type AuditEntry = record {
+    id : nat64;
+    timestamp : nat64;
+    action_type : text;
+    action_params : text;
+    requester : principal;
+    policy_result : PolicyResult;
+    threshold_request_id : opt nat64;
+    execution_result : opt ExecutionResult;
+};
+
+type PolicyResult = record {
+    decision : PolicyDecision;
+    matched_policy : opt text;
+    reason : text;
+};
+
+type PolicyDecision = variant {
+    Allowed;
+    Denied;
+    RequiresThreshold;
+};
+
+type Policy = record {
+    name : text;
+    conditions : vec Condition;
+    action : PolicyAction;
+    priority : nat32;
+};
+
+type Condition = variant {
+    MaxAmount : nat64;
+    DailyLimit : nat64;
+    AllowedTokens : vec text;
+    AllowedChains : vec text;
+    TimeWindow : record { start : nat64; end : nat64 };
+    Cooldown : nat64;
+};
+
+type PolicyAction = variant {
+    Allow;
+    Deny;
+    RequireThreshold : record { required : nat8; from_roles : vec Role };
+};
+
+type ChainGuardConfig = record {
+    name : text;
+    default_threshold : record { required : nat8; total : nat8 };
+    supported_chains : vec text;
+    policies : vec Policy;
+};
+
+service : {
+    // Initialization
+    initialize : (ChainGuardConfig) -> (variant { Ok; Err : text });
+
+    // Role Management
+    assign_role : (principal, Role) -> (variant { Ok; Err : text });
+    revoke_role : (principal, Role) -> (variant { Ok; Err : text });
+    get_roles : (principal) -> (vec Role) query;
+    list_role_assignments : () -> (vec record { principal; Role }) query;
+
+    // Policy Management
+    add_policy : (Policy) -> (variant { Ok : nat64; Err : text });
+    update_policy : (nat64, Policy) -> (variant { Ok; Err : text });
+    remove_policy : (nat64) -> (variant { Ok; Err : text });
+    list_policies : () -> (vec Policy) query;
+
+    // Action Execution (for AI agents)
+    request_action : (Action) -> (ActionResult);
+
+    // Threshold Signing (for signers)
+    get_pending_requests : () -> (vec PendingRequest) query;
+    sign_request : (nat64) -> (variant { Ok : PendingRequest; Err : text });
+    reject_request : (nat64, text) -> (variant { Ok; Err : text });
+
+    // Audit
+    get_audit_logs : (opt nat64, opt nat64) -> (vec AuditEntry) query;
+    get_audit_entry : (nat64) -> (opt AuditEntry) query;
+
+    // Emergency
+    pause : () -> (variant { Ok; Err : text });
+    resume : () -> (variant { Ok; Err : text });
+    is_paused : () -> (bool) query;
+
+    // Info
+    get_config : () -> (opt ChainGuardConfig) query;
+}
