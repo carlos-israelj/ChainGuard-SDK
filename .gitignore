@@ -6,6 +6,9 @@ Cargo.lock
 .dfx/
 .env
 
+# Config with secrets
+src/chainguard/src/config.rs
+
 # IDE
 .vscode/
 .idea/
@@ -19,3 +22,6 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Internal documentation
+WEEK3_INTEGRATION.md

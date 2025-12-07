@@ -1,19 +1,14 @@
 use crate::types::*;
+use crate::evm_rpc::EvmRpcExecutor;
 use ic_cdk::api::management_canister::ecdsa::{
-    ecdsa_public_key, sign_with_ecdsa, EcdsaCurve, EcdsaKeyId, EcdsaPublicKeyArgument,
-    SignWithEcdsaArgument,
+    ecdsa_public_key, sign_with_ecdsa, EcdsaCurve, EcdsaKeyId, EcdsaPublicKeyArgument, SignWithEcdsaArgument,
 };
-use alloy::providers::{Provider, ProviderBuilder};
-use alloy::signers::icp::IcpSigner;
-use alloy::transports::icp::{IcpConfig, RpcService, EthMainnetService, EthSepoliaService, L2MainnetService};
-use alloy::primitives::{Address, U256};
-use alloy::rpc::types::TransactionRequest;
 
 /// Multi-chain transaction executor using Chain-Key ECDSA and ic-alloy
 #[derive(Clone)]
 pub struct ChainExecutor {
-    key_name: String,
-    derivation_path: Vec<Vec<u8>>,
+    pub key_name: String,
+    pub derivation_path: Vec<Vec<u8>>,
 }
 
 impl ChainExecutor {
@@ -69,7 +64,7 @@ impl ChainExecutor {
         }
     }
 
-    /// Execute a token transfer
+    /// Execute a token transfer using EVM RPC canister
     async fn execute_transfer(
         &self,
         chain: &str,
@@ -77,66 +72,35 @@ impl ChainExecutor {
         to: &str,
         amount: u64,
     ) -> ExecutionResult {
-        // Get RPC service for the chain
-        let rpc_service = match self.get_rpc_service(chain) {
-            Ok(service) => service,
-            Err(e) => {
-                return ExecutionResult {
-                    success: false,
-                    chain: chain.to_string(),
-                    tx_hash: None,
-                    error: Some(e),
-                }
-            }
-        };
-
-        // Create ICP config
-        let config = IcpConfig::new(rpc_service);
-
-        // Build provider with ICP transport
-        let provider = ProviderBuilder::new().on_icp(config);
-
-        // Create ICP signer
-        let signer = IcpSigner::new(
+        // Create EVM RPC executor
+        let evm_executor = match EvmRpcExecutor::new(
+            self.key_name.clone(),
             self.derivation_path.clone(),
-            &self.key_name,
-            None,
-        );
-
-        // Parse recipient address
-        let to_addr: Address = match to.parse() {
-            Ok(addr) => addr,
+        ) {
+            Ok(executor) => executor,
             Err(e) => {
                 return ExecutionResult {
                     success: false,
                     chain: chain.to_string(),
                     tx_hash: None,
-                    error: Some(format!("Invalid address: {:?}", e)),
+                    error: Some(format!("Failed to create EVM RPC executor: {}", e)),
                 }
             }
         };
 
-        // Build transaction
-        let tx = TransactionRequest::default()
-            .to(to_addr)
-            .value(U256::from(amount));
-
-        // Send transaction
-        match provider.send_transaction(tx).await {
-            Ok(pending) => {
-                let tx_hash = format!("{:?}", pending.tx_hash());
-                ExecutionResult {
-                    success: true,
-                    chain: chain.to_string(),
-                    tx_hash: Some(tx_hash),
-                    error: None,
-                }
-            }
+        // Execute the transfer via EVM RPC canister
+        match evm_executor.transfer(chain, to, amount).await {
+            Ok(tx_hash) => ExecutionResult {
+                success: true,
+                chain: chain.to_string(),
+                tx_hash: Some(tx_hash),
+                error: None,
+            },
             Err(e) => ExecutionResult {
                 success: false,
                 chain: chain.to_string(),
                 tx_hash: None,
-                error: Some(format!("Transaction failed: {:?}", e)),
+                error: Some(format!("Transaction failed: {}", e)),
             },
         }
     }
@@ -176,19 +140,7 @@ impl ChainExecutor {
         }
     }
 
-    /// Get RPC service for a specific chain
-    fn get_rpc_service(&self, chain: &str) -> Result<RpcService, String> {
-        use alloy::transports::icp::{EthMainnetService, EthSepoliaService, L2MainnetService};
-
-        match chain.to_lowercase().as_str() {
-            "ethereum" | "eth" => Ok(RpcService::EthMainnet(EthMainnetService::Cloudflare)),
-            "sepolia" => Ok(RpcService::EthSepolia(EthSepoliaService::Ankr)),
-            "arbitrum" | "arbitrum-one" => Ok(RpcService::ArbitrumOne(L2MainnetService::Ankr)),
-            "optimism" | "op" => Ok(RpcService::OptimismMainnet(L2MainnetService::Ankr)),
-            "base" => Ok(RpcService::BaseMainnet(L2MainnetService::Ankr)),
-            _ => Err(format!("Unsupported chain: {}. Supported: ethereum, sepolia, arbitrum, optimism, base", chain)),
-        }
-    }
+    // Removed: get_rpc_service - no longer needed with EVM RPC canister approach
 
     /// Sign a message with Chain-Key ECDSA
     pub async fn sign_message(&self, message: &[u8]) -> Result<Vec<u8>, String> {
@@ -213,8 +165,9 @@ impl ChainExecutor {
 
 impl Default for ChainExecutor {
     fn default() -> Self {
-        // Use test key for local development, production key for mainnet
-        Self::new("dfx_test_key".to_string())
+        // Use test_key_1 for IC testnet/mainnet testing
+        // For production, use "key_1"
+        Self::new("test_key_1".to_string())
     }
 }
 

@@ -9,6 +9,8 @@ mod threshold;
 mod audit;
 mod errors;
 mod executor;
+mod evm_rpc;
+mod config;
 
 use types::*;
 use access_control::AccessControl;
@@ -438,6 +440,19 @@ fn is_paused() -> bool {
 #[query]
 fn get_config() -> Option<ChainGuardConfig> {
     STATE.with(|state| state.borrow().config.clone())
+}
+
+#[update]
+async fn get_eth_address() -> Result<String, String> {
+    use crate::evm_rpc::EvmRpcExecutor;
+
+    let (key_name, derivation_path) = STATE.with(|state| {
+        let s = state.borrow();
+        (s.executor.key_name.clone(), s.executor.derivation_path.clone())
+    });
+
+    let evm_executor = EvmRpcExecutor::new(key_name, derivation_path)?;
+    evm_executor.get_eth_address().await
 }
 
 // Export Candid interface
