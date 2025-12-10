@@ -310,6 +310,7 @@ mod tests {
             token_out: "WETH".to_string(),
             amount_in: 1000,
             min_amount_out: 500,
+            fee_tier: None,
         };
 
         let transfer = Action::Transfer {
@@ -355,6 +356,7 @@ mod tests {
             token_out: "WETH".to_string(),
             amount_in: 1000,
             min_amount_out: 500,
+            fee_tier: None,
         };
 
         let json = AuditLog::action_to_json(&action);

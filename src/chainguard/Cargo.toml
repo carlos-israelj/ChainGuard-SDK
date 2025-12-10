@@ -25,3 +25,6 @@ num-traits = "0.2"
 evm-rpc-canister-types = "5.0"
 
 getrandom = { version = "0.2.15", features = ["custom"] }
+
+[dev-dependencies]
+candid = "0.10"

@@ -474,4 +474,308 @@ mod tests {
         assert_eq!(encoded.len(), 68);
         assert_eq!(&encoded[0..4], &erc20::ALLOWANCE_SELECTOR);
     }
+
+    #[test]
+    fn test_weth_deposit_encoding() {
+        let encoded = weth::encode_deposit();
+
+        // Should be exactly 4 bytes (just the selector)
+        assert_eq!(encoded.len(), 4);
+        assert_eq!(&encoded[0..4], &weth::DEPOSIT_SELECTOR);
+        assert_eq!(encoded[0], 0xd0);
+        assert_eq!(encoded[1], 0xe3);
+        assert_eq!(encoded[2], 0x0d);
+        assert_eq!(encoded[3], 0xb0);
+    }
+
+    #[test]
+    fn test_uniswap_v2_swap_exact_tokens_for_tokens() {
+        let token0: Address = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+            .parse()
+            .unwrap(); // USDC
+        let token1: Address = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+            .parse()
+            .unwrap(); // WETH
+        let to: Address = "0x1111111111111111111111111111111111111111"
+            .parse()
+            .unwrap();
+
+        let amount_in = U256::from(1000000u64); // 1 USDC (6 decimals)
+        let amount_out_min = U256::from(1);
+        let path = vec![token0, token1];
+        let deadline = U256::from(9999999999u64);
+
+        let encoded = uniswap_v2::encode_swap_exact_tokens_for_tokens(
+            amount_in,
+            amount_out_min,
+            path.clone(),
+            to,
+            deadline,
+        );
+
+        // Verify selector
+        assert_eq!(&encoded[0..4], &uniswap_v2::SWAP_EXACT_TOKENS_FOR_TOKENS);
+
+        // Expected length: 4 (selector) + 5*32 (params) + 32 (array length) + 2*32 (path)
+        // = 4 + 160 + 32 + 64 = 260 bytes
+        assert_eq!(encoded.len(), 260);
+    }
+
+    #[test]
+    fn test_uniswap_v2_swap_exact_eth_for_tokens() {
+        let weth: Address = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+            .parse()
+            .unwrap();
+        let usdc: Address = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+            .parse()
+            .unwrap();
+        let to: Address = "0x2222222222222222222222222222222222222222"
+            .parse()
+            .unwrap();
+
+        let amount_out_min = U256::from(1);
+        let path = vec![weth, usdc];
+        let deadline = U256::from(9999999999u64);
+
+        let encoded = uniswap_v2::encode_swap_exact_eth_for_tokens(
+            amount_out_min,
+            path,
+            to,
+            deadline,
+        );
+
+        // Verify selector
+        assert_eq!(&encoded[0..4], &uniswap_v2::SWAP_EXACT_ETH_FOR_TOKENS);
+
+        // Expected length: 4 (selector) + 4*32 (params) + 32 (array length) + 2*32 (path)
+        // = 4 + 128 + 32 + 64 = 228 bytes
+        assert_eq!(encoded.len(), 228);
+    }
+
+    #[test]
+    fn test_uniswap_v2_swap_exact_tokens_for_eth() {
+        let usdc: Address = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+            .parse()
+            .unwrap();
+        let weth: Address = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+            .parse()
+            .unwrap();
+        let to: Address = "0x3333333333333333333333333333333333333333"
+            .parse()
+            .unwrap();
+
+        let amount_in = U256::from(1000000u64);
+        let amount_out_min = U256::from(1);
+        let path = vec![usdc, weth];
+        let deadline = U256::from(9999999999u64);
+
+        let encoded = uniswap_v2::encode_swap_exact_tokens_for_eth(
+            amount_in,
+            amount_out_min,
+            path,
+            to,
+            deadline,
+        );
+
+        // Verify selector
+        assert_eq!(&encoded[0..4], &uniswap_v2::SWAP_EXACT_TOKENS_FOR_ETH);
+
+        // Expected length: 4 (selector) + 5*32 (params) + 32 (array length) + 2*32 (path)
+        // = 4 + 160 + 32 + 64 = 260 bytes
+        assert_eq!(encoded.len(), 260);
+    }
+
+    #[test]
+    fn test_uniswap_v3_exact_input_single() {
+        let usdc: Address = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+            .parse()
+            .unwrap();
+        let weth: Address = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+            .parse()
+            .unwrap();
+        let recipient: Address = "0x4444444444444444444444444444444444444444"
+            .parse()
+            .unwrap();
+
+        let amount_in = U256::from(1000000u64);
+        let amount_out_minimum = U256::from(1);
+        let sqrt_price_limit_x96 = U256::zero();
+        let fee = 3000u32; // 0.3%
+
+        let encoded = uniswap_v3::encode_exact_input_single(
+            usdc,
+            weth,
+            fee,
+            recipient,
+            amount_in,
+            amount_out_minimum,
+            sqrt_price_limit_x96,
+        );
+
+        // Verify selector
+        assert_eq!(&encoded[0..4], &uniswap_v3::EXACT_INPUT_SINGLE_SELECTOR);
+
+        // Expected length: 4 (selector) + 7*32 (params) = 4 + 224 = 228 bytes
+        assert_eq!(encoded.len(), 228);
+
+        // Verify fee encoding (uint24 in 32 bytes)
+        // Fee should be in last 4 bytes of the fee field
+        let fee_start = 4 + 32 + 32; // After selector, tokenIn, tokenOut
+        let fee_bytes = &encoded[fee_start..fee_start + 32];
+        assert_eq!(&fee_bytes[28..32], &fee.to_be_bytes());
+    }
+
+    #[test]
+    fn test_uniswap_v3_different_fee_tiers() {
+        let token_in: Address = "0x1111111111111111111111111111111111111111"
+            .parse()
+            .unwrap();
+        let token_out: Address = "0x2222222222222222222222222222222222222222"
+            .parse()
+            .unwrap();
+        let recipient: Address = "0x3333333333333333333333333333333333333333"
+            .parse()
+            .unwrap();
+
+        let amount_in = U256::from(1000u64);
+        let amount_out_minimum = U256::from(1);
+        let sqrt_price_limit_x96 = U256::zero();
+
+        // Test 0.05% fee tier
+        let encoded_500 = uniswap_v3::encode_exact_input_single(
+            token_in,
+            token_out,
+            500,
+            recipient,
+            amount_in,
+            amount_out_minimum,
+            sqrt_price_limit_x96,
+        );
+
+        // Test 0.3% fee tier
+        let encoded_3000 = uniswap_v3::encode_exact_input_single(
+            token_in,
+            token_out,
+            3000,
+            recipient,
+            amount_in,
+            amount_out_minimum,
+            sqrt_price_limit_x96,
+        );
+
+        // Test 1% fee tier
+        let encoded_10000 = uniswap_v3::encode_exact_input_single(
+            token_in,
+            token_out,
+            10000,
+            recipient,
+            amount_in,
+            amount_out_minimum,
+            sqrt_price_limit_x96,
+        );
+
+        // All should have same length
+        assert_eq!(encoded_500.len(), 228);
+        assert_eq!(encoded_3000.len(), 228);
+        assert_eq!(encoded_10000.len(), 228);
+
+        // But different fee values
+        assert_ne!(encoded_500, encoded_3000);
+        assert_ne!(encoded_3000, encoded_10000);
+    }
+
+    #[test]
+    fn test_permit2_approve_encoding() {
+        let token: Address = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+            .parse()
+            .unwrap(); // USDC
+        let spender: Address = "0x3fC91A3afd70395Cd496C647d5a6CC9D4B2b7FAD"
+            .parse()
+            .unwrap(); // Universal Router
+        let amount = U256::from(1000000u64);
+        let expiration = 1735689600u64; // Unix timestamp
+
+        let encoded = permit2::encode_approve(token, spender, amount, expiration);
+
+        // Should be 132 bytes: 4 (selector) + 32*4 (params)
+        assert_eq!(encoded.len(), 132);
+
+        // Verify selector
+        assert_eq!(&encoded[0..4], &permit2::APPROVE_SELECTOR);
+        assert_eq!(encoded[0], 0x87);
+        assert_eq!(encoded[1], 0x51);
+        assert_eq!(encoded[2], 0x7c);
+        assert_eq!(encoded[3], 0x45);
+    }
+
+    #[test]
+    fn test_permit2_approve_with_max_expiration() {
+        let token: Address = "0x1111111111111111111111111111111111111111"
+            .parse()
+            .unwrap();
+        let spender: Address = "0x2222222222222222222222222222222222222222"
+            .parse()
+            .unwrap();
+        let amount = U256::from(u128::MAX); // Max uint128
+        let expiration = u64::MAX; // Max uint48 will be truncated
+
+        let encoded = permit2::encode_approve(token, spender, amount, expiration);
+
+        assert_eq!(encoded.len(), 132);
+        assert_eq!(&encoded[0..4], &permit2::APPROVE_SELECTOR);
+    }
+
+    #[test]
+    fn test_permit2_approve_zero_values() {
+        let token: Address = "0x0000000000000000000000000000000000000000"
+            .parse()
+            .unwrap();
+        let spender: Address = "0x0000000000000000000000000000000000000000"
+            .parse()
+            .unwrap();
+        let amount = U256::zero();
+        let expiration = 0u64;
+
+        let encoded = permit2::encode_approve(token, spender, amount, expiration);
+
+        assert_eq!(encoded.len(), 132);
+        assert_eq!(&encoded[0..4], &permit2::APPROVE_SELECTOR);
+    }
+
+    #[test]
+    fn test_erc20_large_amounts() {
+        let spender: Address = "0x1111111111111111111111111111111111111111"
+            .parse()
+            .unwrap();
+
+        // Test with max uint256
+        let max_amount = U256::MAX;
+        let encoded = erc20::encode_approve(spender, max_amount);
+
+        assert_eq!(encoded.len(), 68);
+        assert_eq!(&encoded[0..4], &erc20::APPROVE_SELECTOR);
+
+        // Verify all amount bytes are 0xff
+        let amount_bytes = &encoded[36..68];
+        assert!(amount_bytes.iter().all(|&b| b == 0xff));
+    }
+
+    #[test]
+    fn test_address_padding() {
+        // Addresses should be left-padded with zeros to 32 bytes
+        let address: Address = "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd"
+            .parse()
+            .unwrap();
+        let amount = U256::from(100u64);
+
+        let encoded = erc20::encode_approve(address, amount);
+
+        // Check that bytes 4-15 are zeros (padding)
+        let padding = &encoded[4..16];
+        assert!(padding.iter().all(|&b| b == 0));
+
+        // Check that bytes 16-35 contain the address
+        let addr_bytes = &encoded[16..36];
+        assert_eq!(addr_bytes, address.as_bytes());
+    }
 }

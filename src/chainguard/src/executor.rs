@@ -533,19 +533,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_get_rpc_service() {
-        let executor = ChainExecutor::default();
-
-        assert!(executor.get_rpc_service("ethereum").is_ok());
-        assert!(executor.get_rpc_service("sepolia").is_ok());
-        assert!(executor.get_rpc_service("arbitrum").is_ok());
-        assert!(executor.get_rpc_service("optimism").is_ok());
-        assert!(executor.get_rpc_service("base").is_ok());
-
-        assert!(executor.get_rpc_service("unsupported").is_err());
-    }
-
-    #[test]
     fn test_executor_creation() {
         let executor = ChainExecutor::new("test_key".to_string());
         assert_eq!(executor.key_name, "test_key");

@@ -309,4 +309,341 @@ mod tests {
         assert_eq!(commands::WRAP_ETH, 0x0b);
         assert_eq!(commands::UNWRAP_WETH, 0x0c);
     }
+
+    #[test]
+    fn test_get_universal_router_address() {
+        // Sepolia
+        let sepolia_addr = get_universal_router_address("sepolia");
+        assert_eq!(sepolia_addr, Some("0x3a9d48ab9751398bbfa63ad67599bb04e4bdf98b"));
+
+        let sepolia_caps = get_universal_router_address("Sepolia");
+        assert_eq!(sepolia_caps, Some("0x3a9d48ab9751398bbfa63ad67599bb04e4bdf98b"));
+
+        // Ethereum mainnet
+        let mainnet_eth = get_universal_router_address("ethereum");
+        assert_eq!(mainnet_eth, Some("0x3fC91A3afd70395Cd496C647d5a6CC9D4B2b7FAD"));
+
+        let mainnet = get_universal_router_address("mainnet");
+        assert_eq!(mainnet, Some("0x3fC91A3afd70395Cd496C647d5a6CC9D4B2b7FAD"));
+
+        // Unknown chain
+        let unknown = get_universal_router_address("polygon");
+        assert_eq!(unknown, None);
+    }
+
+    #[test]
+    fn test_encode_v3_swap_exact_in_basic() {
+        let recipient: Address = "0x1111111111111111111111111111111111111111".parse().unwrap();
+        let amount_in = U256::from(1000000u64);
+        let amount_out_minimum = U256::from(1u64);
+
+        // Simple path: USDC -> WETH
+        let usdc: Address = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238".parse().unwrap();
+        let weth: Address = "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14".parse().unwrap();
+        let path = encode_v3_path(vec![usdc, weth], vec![3000]);
+
+        let encoded = encode_v3_swap_exact_in(
+            recipient,
+            amount_in,
+            amount_out_minimum,
+            path,
+            true,
+        );
+
+        // Basic structure checks
+        assert!(encoded.len() > 0);
+
+        // Check recipient is encoded (bytes 0-31)
+        let recipient_bytes = &encoded[12..32];
+        assert_eq!(recipient_bytes, recipient.as_bytes());
+
+        // Check payer_is_user is true (byte 31 of 5th word)
+        let payer_offset = 4 * 32;
+        assert_eq!(encoded[payer_offset + 31], 1);
+    }
+
+    #[test]
+    fn test_encode_v3_swap_exact_in_payer_false() {
+        let recipient: Address = "0x2222222222222222222222222222222222222222".parse().unwrap();
+        let amount_in = U256::from(500000u64);
+        let amount_out_minimum = U256::from(1u64);
+
+        let token0: Address = "0x1111111111111111111111111111111111111111".parse().unwrap();
+        let token1: Address = "0x3333333333333333333333333333333333333333".parse().unwrap();
+        let path = encode_v3_path(vec![token0, token1], vec![3000]);
+
+        let encoded = encode_v3_swap_exact_in(
+            recipient,
+            amount_in,
+            amount_out_minimum,
+            path,
+            false, // payer_is_user = false
+        );
+
+        // Check payer_is_user is false
+        let payer_offset = 4 * 32;
+        assert_eq!(encoded[payer_offset + 31], 0);
+    }
+
+    #[test]
+    fn test_encode_v3_swap_exact_in_multi_hop() {
+        let recipient: Address = "0x4444444444444444444444444444444444444444".parse().unwrap();
+        let amount_in = U256::from(1000000u64);
+        let amount_out_minimum = U256::from(1u64);
+
+        // Multi-hop path: Token0 -> Token1 -> Token2
+        let token0: Address = "0x1111111111111111111111111111111111111111".parse().unwrap();
+        let token1: Address = "0x2222222222222222222222222222222222222222".parse().unwrap();
+        let token2: Address = "0x3333333333333333333333333333333333333333".parse().unwrap();
+
+        let path = encode_v3_path(
+            vec![token0, token1, token2],
+            vec![3000, 500],
+        );
+
+        let encoded = encode_v3_swap_exact_in(
+            recipient,
+            amount_in,
+            amount_out_minimum,
+            path.clone(),
+            true,
+        );
+
+        // Path length should be 66 bytes (20 + 3 + 20 + 3 + 20)
+        assert_eq!(path.len(), 66);
+
+        // Encoded data should be longer due to multi-hop
+        assert!(encoded.len() > 200);
+    }
+
+    #[test]
+    fn test_encode_wrap_eth() {
+        let recipient: Address = "0x5555555555555555555555555555555555555555".parse().unwrap();
+        let amount_min = U256::from(1000000000000000000u64); // 1 ETH in wei
+
+        let encoded = encode_wrap_eth(recipient, amount_min);
+
+        // Should be 64 bytes: 32 (recipient) + 32 (amount_min)
+        assert_eq!(encoded.len(), 64);
+
+        // Check recipient encoding
+        let recipient_bytes = &encoded[12..32];
+        assert_eq!(recipient_bytes, recipient.as_bytes());
+
+        // Check amount encoding (last 32 bytes)
+        let mut expected_amount = [0u8; 32];
+        amount_min.to_big_endian(&mut expected_amount);
+        assert_eq!(&encoded[32..64], &expected_amount);
+    }
+
+    #[test]
+    fn test_encode_wrap_eth_zero_amount() {
+        let recipient: Address = "0x6666666666666666666666666666666666666666".parse().unwrap();
+        let amount_min = U256::zero();
+
+        let encoded = encode_wrap_eth(recipient, amount_min);
+
+        assert_eq!(encoded.len(), 64);
+
+        // Last 32 bytes should be all zeros
+        let amount_bytes = &encoded[32..64];
+        assert!(amount_bytes.iter().all(|&b| b == 0));
+    }
+
+    #[test]
+    fn test_encode_unwrap_weth() {
+        let recipient: Address = "0x7777777777777777777777777777777777777777".parse().unwrap();
+        let amount_min = U256::from(500000000000000000u64); // 0.5 ETH in wei
+
+        let encoded = encode_unwrap_weth(recipient, amount_min);
+
+        // Should be 64 bytes: 32 (recipient) + 32 (amount_min)
+        assert_eq!(encoded.len(), 64);
+
+        // Check recipient encoding
+        let recipient_bytes = &encoded[12..32];
+        assert_eq!(recipient_bytes, recipient.as_bytes());
+    }
+
+    #[test]
+    fn test_encode_unwrap_weth_special_address() {
+        // Test with MSG_SENDER special address
+        let recipient: Address = special_addresses::MSG_SENDER.parse().unwrap();
+        let amount_min = U256::from(1u64);
+
+        let encoded = encode_unwrap_weth(recipient, amount_min);
+
+        assert_eq!(encoded.len(), 64);
+
+        // Verify special address is encoded correctly
+        let recipient_bytes = &encoded[12..32];
+        assert_eq!(recipient_bytes, recipient.as_bytes());
+    }
+
+    #[test]
+    fn test_encode_execute_single_command() {
+        // Simple execute with one WRAP_ETH command
+        let recipient: Address = special_addresses::ADDRESS_THIS.parse().unwrap();
+        let amount = U256::from(1000000000000000000u64);
+
+        let commands = vec![commands::WRAP_ETH];
+        let inputs = vec![encode_wrap_eth(recipient, amount)];
+        let deadline = 1735689600u64; // Some future timestamp
+
+        let encoded = encode_execute(commands, inputs, deadline);
+
+        // Verify function selector (first 4 bytes)
+        assert_eq!(&encoded[0..4], &[0x35, 0x93, 0x56, 0x4c]);
+
+        // Should have substantial length with all ABI encoding
+        assert!(encoded.len() > 100);
+    }
+
+    #[test]
+    fn test_encode_execute_multiple_commands() {
+        // Test with multiple commands: WRAP_ETH + V3_SWAP_EXACT_IN
+        let recipient: Address = "0x8888888888888888888888888888888888888888".parse().unwrap();
+        let wrap_amount = U256::from(1000000000000000000u64);
+        let swap_amount = U256::from(1000000u64);
+
+        let token0: Address = "0x1111111111111111111111111111111111111111".parse().unwrap();
+        let token1: Address = "0x2222222222222222222222222222222222222222".parse().unwrap();
+        let path = encode_v3_path(vec![token0, token1], vec![3000]);
+
+        let commands = vec![commands::WRAP_ETH, commands::V3_SWAP_EXACT_IN];
+        let inputs = vec![
+            encode_wrap_eth(recipient, wrap_amount),
+            encode_v3_swap_exact_in(recipient, swap_amount, U256::from(1u64), path, true),
+        ];
+        let deadline = 9999999999u64;
+
+        let encoded = encode_execute(commands, inputs, deadline);
+
+        // Verify function selector
+        assert_eq!(&encoded[0..4], &[0x35, 0x93, 0x56, 0x4c]);
+
+        // Should be quite long with two commands
+        assert!(encoded.len() > 200);
+    }
+
+    #[test]
+    fn test_encode_execute_empty_commands() {
+        let commands: Vec<u8> = vec![];
+        let inputs: Vec<Vec<u8>> = vec![];
+        let deadline = 1000000u64;
+
+        let encoded = encode_execute(commands, inputs, deadline);
+
+        // Should still have valid structure even with no commands
+        assert_eq!(&encoded[0..4], &[0x35, 0x93, 0x56, 0x4c]);
+    }
+
+    #[test]
+    #[should_panic(expected = "Commands and inputs must have same length")]
+    fn test_encode_execute_mismatched_lengths() {
+        let commands = vec![commands::WRAP_ETH];
+        let inputs = vec![]; // Mismatched: 1 command, 0 inputs
+        let deadline = 1000000u64;
+
+        encode_execute(commands, inputs, deadline);
+    }
+
+    #[test]
+    fn test_command_flag_allow_revert() {
+        // Test that FLAG_ALLOW_REVERT can be combined with commands
+        let command_with_flag = commands::V3_SWAP_EXACT_IN | commands::FLAG_ALLOW_REVERT;
+
+        assert_eq!(command_with_flag, 0x80);
+        assert_ne!(command_with_flag, commands::V3_SWAP_EXACT_IN);
+    }
+
+    #[test]
+    fn test_special_addresses_constants() {
+        // Verify special addresses are valid
+        let address_this: Result<Address, _> = special_addresses::ADDRESS_THIS.parse();
+        assert!(address_this.is_ok());
+
+        let msg_sender: Result<Address, _> = special_addresses::MSG_SENDER.parse();
+        assert!(msg_sender.is_ok());
+
+        // Verify they're different
+        assert_ne!(
+            special_addresses::ADDRESS_THIS,
+            special_addresses::MSG_SENDER
+        );
+    }
+
+    #[test]
+    fn test_permit2_address_constant() {
+        // Verify Permit2 address is valid and consistent
+        let permit2: Result<Address, _> = PERMIT2_ADDRESS.parse();
+        assert!(permit2.is_ok());
+
+        // Should be the canonical Permit2 address
+        assert_eq!(PERMIT2_ADDRESS, "0x000000000022D473030F116dDEE9F6B43aC78BA3");
+    }
+
+    #[test]
+    fn test_encode_v3_swap_exact_in_large_amounts() {
+        let recipient: Address = "0x9999999999999999999999999999999999999999".parse().unwrap();
+        let amount_in = U256::MAX; // Maximum amount
+        let amount_out_minimum = U256::from(1u64);
+
+        let token0: Address = "0x1111111111111111111111111111111111111111".parse().unwrap();
+        let token1: Address = "0x2222222222222222222222222222222222222222".parse().unwrap();
+        let path = encode_v3_path(vec![token0, token1], vec![10000]);
+
+        let encoded = encode_v3_swap_exact_in(
+            recipient,
+            amount_in,
+            amount_out_minimum,
+            path,
+            true,
+        );
+
+        // Check amount_in is encoded as MAX (all 0xff)
+        let amount_in_offset = 32;
+        let amount_in_bytes = &encoded[amount_in_offset..amount_in_offset + 32];
+        assert!(amount_in_bytes.iter().all(|&b| b == 0xff));
+    }
+
+    #[test]
+    #[should_panic(expected = "Invalid path: tokens length must be fees length + 1")]
+    fn test_encode_v3_path_invalid_length() {
+        let token0: Address = "0x1111111111111111111111111111111111111111".parse().unwrap();
+        let token1: Address = "0x2222222222222222222222222222222222222222".parse().unwrap();
+
+        // Invalid: 2 tokens but 2 fees (should be 1 fee)
+        encode_v3_path(vec![token0, token1], vec![3000, 500]);
+    }
+
+    #[test]
+    fn test_encode_v3_path_different_fee_tiers() {
+        let token0: Address = "0x1111111111111111111111111111111111111111".parse().unwrap();
+        let token1: Address = "0x2222222222222222222222222222222222222222".parse().unwrap();
+
+        // Test 0.05% fee tier (500)
+        let path_500 = encode_v3_path(vec![token0, token1], vec![500]);
+
+        // Test 0.3% fee tier (3000)
+        let path_3000 = encode_v3_path(vec![token0, token1], vec![3000]);
+
+        // Test 1% fee tier (10000)
+        let path_10000 = encode_v3_path(vec![token0, token1], vec![10000]);
+
+        // All paths should have same length
+        assert_eq!(path_500.len(), 43);
+        assert_eq!(path_3000.len(), 43);
+        assert_eq!(path_10000.len(), 43);
+
+        // But different fee bytes
+        assert_ne!(path_500, path_3000);
+        assert_ne!(path_3000, path_10000);
+        assert_ne!(path_500, path_10000);
+
+        // Check fee encoding in each path (bytes 20-22)
+        assert_eq!(&path_500[20..23], &[0x00, 0x01, 0xf4]); // 500 in 3 bytes
+        assert_eq!(&path_3000[20..23], &[0x00, 0x0b, 0xb8]); // 3000 in 3 bytes
+        assert_eq!(&path_10000[20..23], &[0x00, 0x27, 0x10]); // 10000 in 3 bytes
+    }
 }
