@@ -55,8 +55,8 @@ impl ChainExecutor {
             Action::Transfer { chain, token, to, amount } => {
                 self.execute_transfer(chain, token, to, *amount).await
             }
-            Action::Swap { chain, token_in, token_out, amount_in, min_amount_out } => {
-                self.execute_swap(chain, token_in, token_out, *amount_in, *min_amount_out).await
+            Action::Swap { chain, token_in, token_out, amount_in, min_amount_out, fee_tier } => {
+                self.execute_swap(chain, token_in, token_out, *amount_in, *min_amount_out, *fee_tier).await
             }
             Action::ApproveToken { chain, token, spender, amount } => {
                 self.execute_approve(chain, token, spender, *amount).await
@@ -105,21 +105,334 @@ impl ChainExecutor {
         }
     }
 
-    /// Execute a token swap (placeholder - requires DEX integration)
+    /// Execute a token swap via Uniswap Universal Router
     async fn execute_swap(
         &self,
         chain: &str,
-        _token_in: &str,
-        _token_out: &str,
-        _amount_in: u64,
-        _min_amount_out: u64,
+        token_in: &str,
+        token_out: &str,
+        amount_in: u64,
+        min_amount_out: u64,
+        fee_tier: Option<u32>,
     ) -> ExecutionResult {
-        // TODO: Implement DEX integration (Uniswap, etc.)
-        ExecutionResult {
-            success: false,
-            chain: chain.to_string(),
-            tx_hash: None,
-            error: Some("Swap not yet implemented - requires DEX integration".to_string()),
+        use crate::universal_router::{self, commands, special_addresses};
+        use crate::abi::erc20;
+        use ethers_core::types::{Address, U256};
+        use ic_cdk::api::time;
+
+        // Get Universal Router address for the chain
+        let router_address = match universal_router::get_universal_router_address(chain) {
+            Some(addr) => addr,
+            None => return ExecutionResult {
+                success: false,
+                chain: chain.to_string(),
+                tx_hash: None,
+                error: Some(format!("Universal Router not available for chain: {}", chain)),
+            },
+        };
+
+        // WETH9 address for the chain (official Uniswap V3 WETH)
+        let weth_address = match chain.to_lowercase().as_str() {
+            "sepolia" => "0xfff9976782d46cc05630d1f6ebab18b2324d6b14", // Sepolia WETH9
+            "ethereum" | "mainnet" => "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", // Mainnet WETH9
+            _ => return ExecutionResult {
+                success: false,
+                chain: chain.to_string(),
+                tx_hash: None,
+                error: Some(format!("WETH not configured for chain: {}", chain)),
+            },
+        };
+
+        // Uniswap V3 Fee Tiers (basis points where 1 bp = 0.01%):
+        // 100 (0.01%) - Stablecoins
+        // 500 (0.05%) - Low volatility pairs
+        // 3000 (0.30%) - Standard pairs (default)
+        // 10000 (1.00%) - Exotic/rare pairs
+        let fee_tier: u32 = fee_tier.unwrap_or(3000);
+        ic_cdk::println!("🔧 Using fee tier: {} ({:.2}%)", fee_tier, fee_tier as f64 / 10000.0);
+
+        // Create EVM RPC executor
+        let evm_executor = match EvmRpcExecutor::new(
+            self.key_name.clone(),
+            self.derivation_path.clone(),
+        ) {
+            Ok(executor) => executor,
+            Err(e) => {
+                return ExecutionResult {
+                    success: false,
+                    chain: chain.to_string(),
+                    tx_hash: None,
+                    error: Some(format!("Failed to create EVM RPC executor: {}", e)),
+                }
+            }
+        };
+
+        // Check if this is an ETH swap
+        let is_eth_in = token_in.to_uppercase() == "ETH";
+        let is_eth_out = token_out.to_uppercase() == "ETH";
+
+        // Parse WETH address
+        let weth_addr: Address = match weth_address.parse() {
+            Ok(addr) => addr,
+            Err(e) => return ExecutionResult {
+                success: false,
+                chain: chain.to_string(),
+                tx_hash: None,
+                error: Some(format!("Invalid WETH address: {:?}", e)),
+            },
+        };
+
+        // Determine actual token addresses for the swap
+        let (actual_token_in, actual_token_out, needs_wrap, needs_unwrap) = if is_eth_in {
+            // ETH -> Token: WETH is token_in
+            let token_out_addr: Address = match token_out.parse() {
+                Ok(addr) => addr,
+                Err(e) => return ExecutionResult {
+                    success: false,
+                    chain: chain.to_string(),
+                    tx_hash: None,
+                    error: Some(format!("Invalid token_out address: {:?}", e)),
+                },
+            };
+            (weth_addr, token_out_addr, true, false)
+        } else if is_eth_out {
+            // Token -> ETH: WETH is token_out
+            let token_in_addr: Address = match token_in.parse() {
+                Ok(addr) => addr,
+                Err(e) => return ExecutionResult {
+                    success: false,
+                    chain: chain.to_string(),
+                    tx_hash: None,
+                    error: Some(format!("Invalid token_in address: {:?}", e)),
+                },
+            };
+            (token_in_addr, weth_addr, false, true)
+        } else {
+            // Token -> Token
+            let token_in_addr: Address = match token_in.parse() {
+                Ok(addr) => addr,
+                Err(e) => return ExecutionResult {
+                    success: false,
+                    chain: chain.to_string(),
+                    tx_hash: None,
+                    error: Some(format!("Invalid token_in address: {:?}", e)),
+                },
+            };
+            let token_out_addr: Address = match token_out.parse() {
+                Ok(addr) => addr,
+                Err(e) => return ExecutionResult {
+                    success: false,
+                    chain: chain.to_string(),
+                    tx_hash: None,
+                    error: Some(format!("Invalid token_out address: {:?}", e)),
+                },
+            };
+            (token_in_addr, token_out_addr, false, false)
+        };
+
+        // Get recipient address (the canister's own address)
+        let recipient = match self.get_eth_address().await {
+            Ok(addr) => match addr.parse::<Address>() {
+                Ok(a) => a,
+                Err(e) => return ExecutionResult {
+                    success: false,
+                    chain: chain.to_string(),
+                    tx_hash: None,
+                    error: Some(format!("Failed to parse ETH address: {:?}", e)),
+                },
+            },
+            Err(e) => return ExecutionResult {
+                success: false,
+                chain: chain.to_string(),
+                tx_hash: None,
+                error: Some(format!("Failed to get ETH address: {}", e)),
+            },
+        };
+
+        // Parse Universal Router address
+        let router_addr: Address = match router_address.parse() {
+            Ok(addr) => addr,
+            Err(e) => return ExecutionResult {
+                success: false,
+                chain: chain.to_string(),
+                tx_hash: None,
+                error: Some(format!("Invalid router address: {:?}", e)),
+            },
+        };
+
+        // Calculate deadline (current time + 15 minutes)
+        let deadline = (time() / 1_000_000_000) + 900; // 15 minutes from now
+
+        // Validate balance before attempting swap (simplified check)
+        // Note: Balance validation will also happen during transaction execution
+        if needs_wrap {
+            // For ETH swaps, log that we're checking balance
+            if let Err(e) = evm_executor.check_eth_balance(&recipient.to_string(), U256::from(amount_in)).await {
+                return ExecutionResult {
+                    success: false,
+                    chain: chain.to_string(),
+                    tx_hash: None,
+                    error: Some(format!("Balance check failed: {}", e)),
+                };
+            }
+        } else {
+            // For token swaps, log that we're checking balance
+            if let Err(e) = evm_executor.check_token_balance(
+                token_in,
+                &recipient.to_string(),
+                U256::from(amount_in)
+            ).await {
+                return ExecutionResult {
+                    success: false,
+                    chain: chain.to_string(),
+                    tx_hash: None,
+                    error: Some(format!("Balance check failed: {}", e)),
+                };
+            }
+        }
+
+        // Build commands and inputs for Universal Router
+        let mut cmd_list = Vec::new();
+        let mut input_list = Vec::new();
+
+        // Step 1: If ETH input, wrap it to WETH
+        if needs_wrap {
+            cmd_list.push(commands::WRAP_ETH);
+            // WRAP_ETH expects: (recipient, amountMin)
+            // recipient = ADDRESS_THIS (router holds it temporarily)
+            let router_as_recipient: Address = special_addresses::ADDRESS_THIS.parse().unwrap();
+            input_list.push(universal_router::encode_wrap_eth(router_as_recipient, U256::from(amount_in)));
+        }
+
+        // Step 2: If token input (not ETH), approve Permit2 and wait for confirmation
+        // Universal Router uses Permit2 to pull tokens, not direct approval
+        // We'll approve with a large amount to minimize future approvals
+        if !needs_wrap {
+            ic_cdk::println!("🔐 Token swap detected - approving Permit2...");
+
+            // Permit2 address (same across all networks - deterministic deployment)
+            let permit2_addr: Address = "0x000000000022D473030F116dDEE9F6B43aC78BA3".parse().unwrap();
+
+            // Approve Permit2 to spend tokens (use 10x the swap amount for buffer)
+            let approval_amount = U256::from(amount_in) * U256::from(10);
+            let approve_call_data = erc20::encode_approve(permit2_addr, approval_amount);
+
+            match evm_executor.call_contract(chain, token_in, approve_call_data, 0).await {
+                Ok(tx_hash) => {
+                    ic_cdk::println!("✅ Token approval to Permit2 sent: {}", tx_hash);
+
+                    // CRITICAL: Wait for approval to be confirmed before proceeding
+                    ic_cdk::println!("⏳ Waiting for token approval confirmation (max 10 attempts)...");
+                    match evm_executor.wait_for_confirmation(&tx_hash, chain, 10).await {
+                        Ok(_) => {
+                            ic_cdk::println!("✅ Token approval confirmed!");
+                        }
+                        Err(e) => {
+                            ic_cdk::println!("⚠️ Could not confirm token approval: {}", e);
+                            ic_cdk::println!("⚠️ Continuing anyway - might have existing approval");
+                        }
+                    }
+                }
+                Err(e) => {
+                    ic_cdk::println!("⚠️ Token approval transaction error: {}", e);
+                    ic_cdk::println!("⚠️ Will attempt Permit2 approval anyway");
+                }
+            }
+
+            // Step 2b: Approve Universal Router in Permit2 to spend tokens via AllowanceTransfer
+            ic_cdk::println!("🔐 Approving Universal Router in Permit2...");
+
+            // Calculate expiration (30 days from now)
+            let expiration = (time() / 1_000_000_000) + (30 * 24 * 60 * 60); // 30 days
+
+            // Encode Permit2.approve(token, spender, amount, expiration)
+            let permit2_approve_data = crate::abi::permit2::encode_approve(
+                actual_token_in,
+                router_address.parse().unwrap(),
+                approval_amount,
+                expiration,
+            );
+
+            match evm_executor.call_contract(chain, "0x000000000022D473030F116dDEE9F6B43aC78BA3", permit2_approve_data, 0).await {
+                Ok(tx_hash) => {
+                    ic_cdk::println!("✅ Permit2 approval sent: {}", tx_hash);
+
+                    // Wait for Permit2 approval to be confirmed
+                    ic_cdk::println!("⏳ Waiting for Permit2 approval confirmation (max 10 attempts)...");
+                    match evm_executor.wait_for_confirmation(&tx_hash, chain, 10).await {
+                        Ok(_) => {
+                            ic_cdk::println!("✅ Permit2 approval confirmed! Proceeding with swap...");
+                        }
+                        Err(e) => {
+                            ic_cdk::println!("⚠️ Could not confirm Permit2 approval: {}", e);
+                            ic_cdk::println!("⚠️ Continuing anyway - swap will fail if approval is missing");
+                        }
+                    }
+                }
+                Err(e) => {
+                    ic_cdk::println!("⚠️ Permit2 approval transaction error: {}", e);
+                    ic_cdk::println!("⚠️ Will attempt swap anyway (might have existing approval)");
+                }
+            }
+        }
+
+        // Step 3: Build V3 swap path
+        let path = universal_router::encode_v3_path(
+            vec![actual_token_in, actual_token_out],
+            vec![fee_tier],
+        );
+
+        // Step 4: Execute the V3 swap
+        cmd_list.push(commands::V3_SWAP_EXACT_IN);
+
+        // Determine recipient for swap output
+        let swap_recipient = if needs_unwrap {
+            // If we need to unwrap, send to router (ADDRESS_THIS)
+            special_addresses::ADDRESS_THIS.parse().unwrap()
+        } else {
+            // Send directly to canister
+            recipient
+        };
+
+        let swap_input = universal_router::encode_v3_swap_exact_in(
+            swap_recipient,
+            U256::from(amount_in),
+            U256::from(min_amount_out),
+            path,
+            !needs_wrap, // payerIsUser = true if not wrapping (tokens come from msg.sender)
+        );
+        input_list.push(swap_input);
+
+        // Step 5: If ETH output, unwrap WETH to ETH
+        if needs_unwrap {
+            cmd_list.push(commands::UNWRAP_WETH);
+            input_list.push(universal_router::encode_unwrap_weth(recipient, U256::from(min_amount_out)));
+        }
+
+        // Build the complete execute() calldata
+        let execute_calldata = universal_router::encode_execute(
+            cmd_list,
+            input_list,
+            deadline,
+        );
+
+        // Determine ETH value to send
+        let eth_value = if needs_wrap { amount_in } else { 0 };
+
+        // Execute via Universal Router
+        match evm_executor.call_contract(chain, router_address, execute_calldata, eth_value).await {
+            Ok(tx_hash) => ExecutionResult {
+                success: true,
+                chain: chain.to_string(),
+                tx_hash: Some(tx_hash),
+                error: None,
+            },
+            Err(e) => ExecutionResult {
+                success: false,
+                chain: chain.to_string(),
+                tx_hash: None,
+                error: Some(format!("Universal Router swap failed: {}", e)),
+            },
         }
     }
 
@@ -127,16 +440,60 @@ impl ChainExecutor {
     async fn execute_approve(
         &self,
         chain: &str,
-        _token: &str,
-        _spender: &str,
-        _amount: u64,
+        token: &str,
+        spender: &str,
+        amount: u64,
     ) -> ExecutionResult {
-        // TODO: Implement ERC20 approve call
-        ExecutionResult {
-            success: false,
-            chain: chain.to_string(),
-            tx_hash: None,
-            error: Some("Approve not yet implemented - requires ERC20 ABI".to_string()),
+        use crate::abi::erc20;
+        use ethers_core::types::{Address, U256};
+
+        // Parse spender address
+        let spender_addr: Address = match spender.parse() {
+            Ok(addr) => addr,
+            Err(e) => {
+                return ExecutionResult {
+                    success: false,
+                    chain: chain.to_string(),
+                    tx_hash: None,
+                    error: Some(format!("Invalid spender address: {:?}", e)),
+                }
+            }
+        };
+
+        // Encode approve(spender, amount) call data
+        let amount_u256 = U256::from(amount);
+        let call_data = erc20::encode_approve(spender_addr, amount_u256);
+
+        // Create EVM RPC executor
+        let evm_executor = match EvmRpcExecutor::new(
+            self.key_name.clone(),
+            self.derivation_path.clone(),
+        ) {
+            Ok(executor) => executor,
+            Err(e) => {
+                return ExecutionResult {
+                    success: false,
+                    chain: chain.to_string(),
+                    tx_hash: None,
+                    error: Some(format!("Failed to create EVM RPC executor: {}", e)),
+                }
+            }
+        };
+
+        // Execute approve via contract call (no ETH value sent)
+        match evm_executor.call_contract(chain, token, call_data, 0).await {
+            Ok(tx_hash) => ExecutionResult {
+                success: true,
+                chain: chain.to_string(),
+                tx_hash: Some(tx_hash),
+                error: None,
+            },
+            Err(e) => ExecutionResult {
+                success: false,
+                chain: chain.to_string(),
+                tx_hash: None,
+                error: Some(format!("Approval failed: {}", e)),
+            },
         }
     }
 

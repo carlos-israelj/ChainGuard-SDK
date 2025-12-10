@@ -19,6 +19,7 @@ type Action = variant {
         token_out : text;
         amount_in : nat64;
         min_amount_out : nat64;
+        fee_tier : opt nat32;
     };
     Transfer : record {
         chain : text;

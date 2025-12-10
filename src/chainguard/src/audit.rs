@@ -81,10 +81,11 @@ impl AuditLog {
     fn action_to_json(action: &Action) -> String {
         // Simple JSON serialization
         match action {
-            Action::Swap { chain, token_in, token_out, amount_in, min_amount_out } => {
+            Action::Swap { chain, token_in, token_out, amount_in, min_amount_out, fee_tier } => {
+                let fee_tier_str = fee_tier.map_or("null".to_string(), |ft| ft.to_string());
                 format!(
-                    r#"{{"chain":"{}","token_in":"{}","token_out":"{}","amount_in":{},"min_amount_out":{}}}"#,
-                    chain, token_in, token_out, amount_in, min_amount_out
+                    r#"{{"chain":"{}","token_in":"{}","token_out":"{}","amount_in":{},"min_amount_out":{},"fee_tier":{}}}"#,
+                    chain, token_in, token_out, amount_in, min_amount_out, fee_tier_str
                 )
             }
             Action::Transfer { chain, token, to, amount } => {

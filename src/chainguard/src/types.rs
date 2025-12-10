@@ -65,6 +65,7 @@ pub enum Action {
         token_out: String,
         amount_in: u64,
         min_amount_out: u64,
+        fee_tier: Option<u32>, // Uniswap V3 fee tier: 500, 3000, or 10000
     },
     Transfer {
         chain: String,
