@@ -1,0 +1,80 @@
+# ChainGuard AI Agent Configuration
+# Copy this file to config.yaml and customize for your setup
+
+# ChainGuard canister settings
+canister:
+  id: "foxtk-ziaaa-aaaai-atthq-cai"  # Replace with your canister ID
+  network: "ic"  # Options: "ic" (mainnet) or "local"
+  host: "https://icp-api.io"  # Use "http://localhost:4943" for local
+
+# Identity configuration
+identity:
+  type: "pem"  # Options: "pem" or "anonymous"
+  path: "./identity.pem"  # Path to your PEM identity file
+
+# Chain configurations
+chains:
+  Sepolia:
+    name: "Sepolia Testnet"
+    tokens:
+      USDC:
+        symbol: "USDC"
+        address: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238"
+        decimals: 6
+      WETH:
+        symbol: "WETH"
+        address: "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14"
+        decimals: 18
+      ETH:
+        symbol: "ETH"
+        address: "ETH"
+        decimals: 18
+
+  Ethereum:
+    name: "Ethereum Mainnet"
+    tokens:
+      USDC:
+        symbol: "USDC"
+        address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+        decimals: 6
+      WETH:
+        symbol: "WETH"
+        address: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+        decimals: 18
+      DAI:
+        symbol: "DAI"
+        address: "0x6B175474E89094C44Da98b954EedeAC495271d0F"
+        decimals: 18
+
+# Strategy configurations
+strategies:
+  # Dollar Cost Averaging Strategy
+  dca:
+    enabled: true
+    interval: "0 0 * * *"  # Daily at midnight (cron format)
+    params:
+      sourceToken: "USDC"
+      targetToken: "ETH"
+      amountPerPurchase: "1000000"  # 1 USDC in smallest unit (6 decimals)
+      chain: "Sepolia"
+      minAmountOut: "1"  # Minimum slippage protection
+
+  # Portfolio Rebalancing Strategy
+  rebalance:
+    enabled: false
+    interval: "0 0 * * 0"  # Weekly on Sunday (cron format)
+    params:
+      chain: "Sepolia"
+      rebalanceThreshold: 5  # Rebalance if any asset deviates by >5%
+      portfolio:
+        - token: "ETH"
+          targetPercentage: 50
+        - token: "USDC"
+          targetPercentage: 30
+        - token: "WETH"
+          targetPercentage: 20
+
+# Risk management limits
+limits:
+  maxTransactionSize: "10000000000000000000"  # 10 ETH in wei
+  dailyLimit: "50000000000000000000"  # 50 ETH in wei

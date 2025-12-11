@@ -1,0 +1,40 @@
+{
+  "name": "chainguard-ai-agent",
+  "version": "1.0.0",
+  "description": "Demo AI Agent for ChainGuard SDK - Automated DCA and portfolio rebalancing with threshold signatures",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "dca": "ts-node src/strategies/dca.ts",
+    "rebalance": "ts-node src/strategies/rebalance.ts",
+    "test": "ts-node src/examples/demo.ts"
+  },
+  "keywords": [
+    "icp",
+    "ai-agent",
+    "defi",
+    "dca",
+    "rebalancing",
+    "threshold-signatures"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@dfinity/agent": "^2.1.1",
+    "@dfinity/candid": "^2.1.1",
+    "@dfinity/principal": "^2.1.1",
+    "@dfinity/identity": "^2.1.1",
+    "dotenv": "^16.4.5",
+    "js-yaml": "^4.1.0",
+    "node-cron": "^3.0.3"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^20.11.19",
+    "@types/node-cron": "^3.0.11",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  }
+}
