@@ -1,31 +1,33 @@
 # ChainGuard AI Agent
 
-**Autonomous DeFi agent for secure multi-chain transactions on ICP**
+Autonomous AI agent for secure multi-chain DeFi strategies on Internet Computer Protocol. Execute automated Dollar Cost Averaging and portfolio rebalancing with policy-based controls, threshold signatures, and complete auditability.
 
-This AI agent demonstrates how to build automated trading strategies using the ChainGuard SDK with policy-based access control, threshold signatures, and complete auditability.
+## Overview
+
+The ChainGuard AI Agent demonstrates how to build autonomous trading strategies that interact with the ChainGuard SDK canister. It showcases policy-based access control, threshold signature workflows, and multi-chain transaction execution with Chain-Key ECDSA.
 
 ## Features
 
-- **🤖 Automated Strategies**
-  - Dollar Cost Averaging (DCA)
-  - Portfolio Rebalancing
-  - Extensible architecture for custom strategies
+**Automated Strategies**
+- Dollar Cost Averaging (DCA) - Regular purchases at fixed intervals
+- Portfolio Rebalancing - Maintain target asset allocations
+- Extensible architecture for custom strategies
 
-- **🔐 Security First**
-  - Policy-based execution control
-  - Threshold signature approval for large transactions
-  - Complete audit trail
-  - Role-based access control
+**Security Architecture**
+- Policy-based execution control at canister level
+- Threshold signature requirements for large transactions
+- Immutable audit trail for all operations
+- Role-based access control (Owner, Operator, Viewer)
 
-- **⛓️ Multi-Chain Support**
-  - Ethereum mainnet
-  - Sepolia testnet
-  - Extensible to other EVM chains
+**Multi-Chain Support**
+- Ethereum mainnet via EVM RPC canister
+- Sepolia testnet for development
+- Extensible to any EVM-compatible chain
 
-- **📊 Monitoring & Analytics**
-  - Real-time strategy performance tracking
-  - Audit log inspection
-  - Pending request monitoring
+**Monitoring & Analytics**
+- Real-time strategy execution logs
+- Audit trail inspection and filtering
+- Pending threshold request monitoring
 
 ## Architecture
 
@@ -153,91 +155,94 @@ strategies:
 
 See `config.example.yaml` for complete configuration options.
 
-## Usage
+## Quick Start
 
 ### Run Complete Demo
 
-Execute all features in a single comprehensive demo:
+Execute all features in a comprehensive demonstration:
 
 ```bash
 npm run test
 ```
 
-This runs the demo script (`src/examples/demo.ts`) which showcases:
+This runs `src/examples/demo.ts` which demonstrates:
+- ChainGuard canister connection
 - Policy-based transaction execution
 - Threshold signature workflow
-- DCA strategy
+- DCA strategy execution
 - Portfolio rebalancing
 - Audit log inspection
 
-### Execute Strategies
+### Execute Individual Strategies
 
 ```bash
-# Run DCA strategy once
+# Dollar Cost Averaging - one-time execution
 npm run dca
 
-# Run rebalancing strategy once
+# Portfolio Rebalancing - one-time execution
 npm run rebalance
-
-# Execute all strategies once
-npm start all
 ```
 
-### Scheduled Execution
-
-Run strategies on a schedule (configured in config.yaml):
+### Development Mode
 
 ```bash
-npm start schedule
-```
+# Compile TypeScript and run main entry point
+npm run dev
 
-The agent will run continuously and execute strategies at scheduled intervals.
-
-### Monitoring
-
-```bash
-# View agent status
-npm start status
-
-# Monitor pending threshold signature requests
-npm start monitor
+# Or build and run compiled code
+npm run build
+npm start
 ```
 
 ## Strategies
 
 ### Dollar Cost Averaging (DCA)
 
-Automatically purchases a fixed amount of a target token at regular intervals, regardless of price. This reduces the impact of volatility.
+Automatically purchases a target asset at regular intervals with a fixed amount, regardless of market price. This strategy reduces volatility impact and removes emotional decision-making from investing.
 
-**Configuration:**
+**How It Works:**
+1. Agent initiates swap from source token to target token
+2. ChainGuard evaluates policies (amount limits, chain restrictions)
+3. Transaction executes via EVM RPC canister
+4. Result logged to audit trail
+
+**Configuration Example:**
 ```yaml
 dca:
   enabled: true
-  interval: "0 0 * * *"  # Cron format
+  interval: "0 0 * * *"  # Daily at midnight (cron format)
   params:
     sourceToken: "USDC"
     targetToken: "ETH"
-    amountPerPurchase: "1000000"  # In smallest unit
+    amountPerPurchase: "1000000"  # 1 USDC (6 decimals)
     chain: "Sepolia"
 ```
 
 **Benefits:**
-- Reduces timing risk
-- Automates accumulation
-- Emotion-free investing
+- Reduces market timing risk
+- Automates consistent accumulation
+- Removes emotional trading decisions
+- Works across market cycles
 
 ### Portfolio Rebalancing
 
-Maintains target asset allocations by automatically swapping when deviations exceed a threshold.
+Maintains target asset allocations by automatically executing swaps when portfolio deviations exceed a configured threshold. Ensures disciplined risk management.
 
-**Configuration:**
+**How It Works:**
+1. Agent queries canister for current token balances
+2. Calculates deviations from target allocations
+3. If threshold exceeded, generates rebalancing swaps
+4. Executes swaps subject to policy evaluation
+5. Logs complete rebalancing actions
+
+**Configuration Example:**
 ```yaml
 rebalance:
   enabled: true
-  interval: "0 0 * * 0"  # Weekly
+  interval: "0 0 * * 0"  # Weekly on Sunday
   params:
     chain: "Sepolia"
-    rebalanceThreshold: 5  # 5% deviation triggers rebalance
+    rebalanceThreshold: 5  # Rebalance if deviation > 5%
     portfolio:
       - token: "ETH"
         targetPercentage: 50
@@ -248,63 +253,133 @@ rebalance:
 ```
 
 **Benefits:**
-- Maintains risk profile
-- Automatic profit-taking
-- Disciplined execution
+- Maintains target risk profile
+- Automatic profit-taking from outperformers
+- Buys underperformers at lower prices
+- Disciplined, rule-based execution
 
-## Policy Integration
+## Policy Engine Integration
 
-The agent respects ChainGuard policies for all transactions:
+All agent transactions are evaluated by the ChainGuard policy engine before execution. Policies define rules based on amount limits, allowed chains, daily limits, and role requirements.
 
-### Example Policies
+### Policy Evaluation Flow
 
-**Auto-approve small transactions:**
-```yaml
-name: "Allow Small Transfers"
-conditions:
-  - MaxAmount: 1000000000000000000  # 1 ETH
-  - AllowedChains: ["Sepolia"]
-action: Allow
-priority: 1
+1. Agent calls `request_action()` with transaction details
+2. ChainGuard evaluates policies in priority order (lowest first)
+3. First matching policy determines outcome:
+   - `Allow` - Execute immediately
+   - `Deny` - Reject transaction
+   - `RequireThreshold` - Create pending request for multi-sig approval
+4. If no policies match, action is denied by default
+
+### Example Policy Configuration
+
+**Auto-approve small DCA purchases:**
+```typescript
+{
+  name: "Allow Small DCA Swaps",
+  conditions: [
+    { MaxAmount: 10000000 },  // Max 10 USDC
+    { AllowedChains: ["Sepolia"] },
+    { DailyLimit: 100000000 }  // 100 USDC per day
+  ],
+  action: { Allow: null },
+  priority: 1
+}
 ```
 
-**Require threshold for large transactions:**
-```yaml
-name: "Threshold for Large Transfers"
-conditions:
-  - MinAmount: 1000000000000000000  # > 1 ETH
-action:
-  RequireThreshold:
-    required: 2
-    from_roles: [Operator, Owner]
-priority: 2
+**Require threshold signatures for large rebalances:**
+```typescript
+{
+  name: "Threshold for Large Rebalances",
+  conditions: [
+    { MinAmount: 100000000 }  // > 100 USDC
+  ],
+  action: {
+    RequireThreshold: {
+      required: 2,
+      from_roles: ["Operator", "Owner"]
+    }
+  },
+  priority: 2
+}
+```
+
+### Setting Policies via CLI
+
+```bash
+# View current policies
+dfx canister call chainguard list_policies --network ic
+
+# Add a new policy (during initialization)
+dfx canister call chainguard initialize '(
+  record {
+    name = "ChainGuard Instance";
+    policies = vec {
+      record {
+        name = "Allow Agent DCA";
+        conditions = vec {
+          variant { MaxAmount = 10000000 };
+          variant { AllowedChains = vec { "Sepolia" } };
+        };
+        action = variant { Allow };
+        priority = 1;
+      }
+    }
+  }
+)' --network ic
 ```
 
 ## Threshold Signature Workflow
 
-When a transaction requires threshold signatures:
+When a policy requires multi-signature approval, the transaction enters a pending state until the required number of authorized signers approve it.
 
-1. **Agent requests action** → ChainGuard evaluates policies
-2. **Policy requires threshold** → Request enters pending state
-3. **Multiple signers approve** → Each calls `sign_request(id)`
-4. **Threshold met** → Transaction executes automatically
-5. **Result logged** → Audit trail updated
+### Workflow Steps
 
-### Signing Pending Requests
+1. **Agent submits action** - Calls `request_action()` with transaction details
+2. **Policy evaluation** - ChainGuard checks if action matches threshold policy
+3. **Pending request created** - Transaction stored with unique ID, awaits signatures
+4. **Signers approve** - Authorized principals call `sign_request(id)`
+5. **Threshold met** - When required signatures collected, transaction auto-executes
+6. **Audit logging** - Complete workflow recorded with timestamps and signers
 
-From the agent:
+### Monitoring Pending Requests
+
+**Via Agent:**
 ```typescript
-// Get pending requests
-const pending = await client.getPendingRequests();
+import { ChainGuardClient } from './utils/chainguard-client';
 
-// Sign a request
+const client = new ChainGuardClient(canisterId, agent);
+
+// Get all pending requests
+const pending = await client.getPendingRequests();
+console.log(`Pending requests: ${pending.length}`);
+
+// Sign a specific request
 await client.signRequest(requestId);
 ```
 
-From dfx CLI:
+**Via CLI:**
 ```bash
+# View pending requests
+dfx canister call chainguard get_pending_requests --network ic
+
+# Sign request as authorized principal
 dfx canister call chainguard sign_request '(1)' --network ic
+
+# Check request status
+dfx canister call chainguard get_pending_request '(1)' --network ic
 ```
+
+### Integration with Frontend
+
+The Next.js dashboard provides a visual interface for threshold signature management:
+- View all pending requests with progress bars
+- See required vs current signatures
+- Approve requests with one click
+- Real-time status updates
+
+Visit `http://localhost:3000/signatures` when running the frontend.
 
 ## Development
 
@@ -330,90 +405,228 @@ ai-agent/
 └── tsconfig.json
 ```
 
-### Building
+### Building and Running
 
 ```bash
-# Compile TypeScript
+# Compile TypeScript to JavaScript
 npm run build
 
-# Output will be in dist/
+# Run compiled code
+npm start
+
+# Or run directly with ts-node (development)
+npm run dev
 ```
+
+Compiled output is placed in the `dist/` directory.
 
 ### Adding Custom Strategies
 
-1. Create a new file in `src/strategies/`
-2. Implement the strategy class with `execute()` method
-3. Use `ChainGuardClient` to interact with the canister
-4. Add configuration to `config.yaml`
-5. Register in `src/index.ts`
+Create custom automated strategies by following this pattern:
 
-Example:
+1. **Create strategy file** in `src/strategies/your-strategy.ts`
+2. **Implement core logic** with ChainGuardClient integration
+3. **Add configuration** to `config.yaml` and `config.example.yaml`
+4. **Create npm script** in `package.json` for easy execution
+5. **Test thoroughly** on Sepolia testnet first
+
+**Example Custom Strategy:**
 
 ```typescript
-export class CustomStrategy {
+// src/strategies/yield-farming.ts
+import { ChainGuardClient } from '../utils/chainguard-client';
+import { ConfigManager } from '../utils/config';
+
+export class YieldFarmingStrategy {
   constructor(
     private client: ChainGuardClient,
     private config: ConfigManager
   ) {}
 
-  async execute(): Promise<ActionResult> {
-    // Your strategy logic
-    return await this.client.swap(...);
+  async execute(): Promise<void> {
+    console.log('Executing yield farming strategy...');
+
+    // Get strategy parameters from config
+    const params = this.config.getStrategy('yieldFarm');
+
+    // Example: Swap USDC for farming token
+    const swapResult = await this.client.swap({
+      chain: params.chain,
+      token_in: params.stableToken,
+      token_out: params.farmToken,
+      amount_in: params.amount,
+      min_amount_out: 1,
+    });
+
+    console.log('Swap completed:', swapResult);
+
+    // Additional logic: staking, reward claiming, etc.
+  }
+}
+```
+
+**Add to package.json:**
+```json
+{
+  "scripts": {
+    "farm": "ts-node src/strategies/yield-farming.ts"
   }
 }
 ```
 
 ## Security Best Practices
 
-1. **Never commit identity files** - Add `*.pem` to `.gitignore`
-2. **Use environment variables** - Store sensitive config in `.env`
-3. **Start with testnet** - Test on Sepolia before mainnet
-4. **Set conservative limits** - Configure `maxTransactionSize` and `dailyLimit`
-5. **Monitor audit logs** - Regularly review transaction history
-6. **Use threshold signatures** - Require multi-sig for large amounts
+**Identity Management**
+- Never commit `*.pem` files - Add to `.gitignore`
+- Use environment variables for sensitive configuration
+- Rotate identities periodically for production agents
+- Store production identities in secure key management systems
+
+**Testing & Deployment**
+- Always test on Sepolia testnet before mainnet deployment
+- Start with small amounts when testing new strategies
+- Verify contract addresses and token decimals
+- Monitor gas prices to avoid expensive transactions
+
+**Policy Configuration**
+- Set conservative amount limits for automated strategies
+- Use daily/hourly limits to prevent runaway execution
+- Require threshold signatures for amounts above certain thresholds
+- Regularly review and audit policy effectiveness
+
+**Monitoring & Alerts**
+- Regularly inspect audit logs for unexpected behavior
+- Set up alerts for failed transactions
+- Monitor canister cycles balance
+- Track strategy performance metrics
+
+**Multi-Signature Requirements**
+- Use threshold signatures for large transactions (>$1000 equivalent)
+- Require multiple roles for critical operations
+- Maintain separation of duties between strategy execution and approval
 
 ## Troubleshooting
 
-### "Failed to load identity"
-- Ensure `identity.pem` exists and has correct permissions
-- Agent will auto-generate temporary identity if not found
+### Identity Issues
 
-### "Connection refused"
-- Check canister ID is correct
-- Verify network setting (ic vs local)
-- For local: ensure `dfx start` is running
+**"Failed to load identity"**
+- Ensure `identity.pem` exists in the agent directory
+- Check file permissions: `chmod 600 identity.pem`
+- Agent auto-generates temporary identity if file not found
+- For production, export your dfx identity: `dfx identity export default > identity.pem`
 
-### "Action denied by policy"
-- Review policies with `dfx canister call chainguard list_policies`
-- Check if your identity has required roles
-- Verify action parameters match policy conditions
+### Connection Errors
 
-### "Insufficient cycles"
-- Canister needs cycles for EVM RPC calls
-- Top up with: `dfx cycles convert --amount 1.0`
+**"Connection refused" or "Canister not found"**
+- Verify canister ID in `config.yaml` matches deployed canister
+- Check network setting: `"ic"` for mainnet, `"local"` for local replica
+- For local development: ensure `dfx start --background` is running
+- Test connection: `dfx canister call chainguard get_config --network ic`
+
+### Policy Rejections
+
+**"Action denied by policy"**
+- List current policies: `dfx canister call chainguard list_policies --network ic`
+- Verify your identity has required role (Owner, Operator)
+- Check action parameters match policy conditions (amount, chain, tokens)
+- Review audit logs for detailed rejection reason
+- Ensure policies exist - if none match, actions are denied by default
+
+### Canister Errors
+
+**"Insufficient cycles"**
+- Canister requires cycles for EVM RPC calls (~10B cycles per call)
+- Check cycles balance: `dfx canister status chainguard --network ic`
+- Top up canister: `dfx cycles convert --amount 1.0 --network ic && dfx canister deposit-cycles 1000000000000 chainguard --network ic`
+
+**"Transaction failed"**
+- Check canister has sufficient ETH/tokens for transaction
+- Verify gas estimation didn't fail (high network congestion)
+- Review audit logs for detailed error message
+- Ensure token addresses are correct for the chain
+
+### Strategy Execution Issues
+
+**DCA not executing**
+- Verify source token balance in canister wallet
+- Check token approval for swap contract
+- Ensure policies allow the swap amount
+- Review audit logs for failed attempts
+
+**Rebalancing not triggering**
+- Verify deviation exceeds `rebalanceThreshold`
+- Check all portfolio tokens have balances
+- Ensure policies allow required swap amounts
+- Review configuration syntax in `config.yaml`
 
 ## Testing
 
 ```bash
-# Run the comprehensive demo
+# Run comprehensive demo (recommended first step)
 npm run test
 
-# Execute specific strategy
-npm run dca
-npm run rebalance
+# Test individual strategies
+npm run dca       # Dollar Cost Averaging
+npm run rebalance # Portfolio Rebalancing
 
-# Check agent status
-npm start status
+# Development mode with auto-reload
+npm run dev
 ```
 
-## Examples
+## Example Walkthrough
 
-See `src/examples/demo.ts` for a complete walkthrough of:
-- Client initialization
-- Policy-based execution
-- Threshold signature workflow
-- Strategy execution
-- Audit log inspection
+The `src/examples/demo.ts` file provides a comprehensive demonstration of all agent capabilities:
+
+**What the demo covers:**
+1. **Client Initialization** - Connecting to ChainGuard canister on IC mainnet
+2. **Configuration Inspection** - Reading canister settings and supported chains
+3. **Policy-Based Execution** - Submitting transactions and observing policy evaluation
+4. **Threshold Signature Workflow** - Creating multi-sig requests and approval process
+5. **DCA Strategy** - Automated USDC → ETH purchases
+6. **Rebalancing Strategy** - Portfolio maintenance with target allocations
+7. **Audit Log Inspection** - Reviewing complete transaction history
+
+**Run the demo:**
+```bash
+npm run test
+```
+
+The demo provides console output showing each step, making it ideal for understanding the complete ChainGuard + AI Agent workflow.
+
+## Production Deployment
+
+**Deployed Canister:**
+- Canister ID: `foxtk-ziaaa-aaaai-atthq-cai`
+- Network: Internet Computer Mainnet
+- Chain-Key ECDSA: `test_key_1`
+- Supported Chains: Ethereum, Sepolia
+
+**Verified Transactions:**
+- Sepolia Contract: `0xfdd0e2016079951225bd88a41b1b7295aa995cad`
+- Example TX: `0xfd8d8b026020e08b06f575702661a76a074c6e34d23f326d84395fec0f9240ad`
+
+## Additional Resources
+
+**ChainGuard SDK**
+- [Main Documentation](../../README.md)
+- [Canister Source Code](../../src/chainguard/)
+- [CLAUDE.md - Project Instructions](../../CLAUDE.md)
+
+**Frontend Dashboard**
+- [Frontend Source](../../frontend/)
+- Location: `http://localhost:3000` when running locally
+- Deployed: TBD
+
+**Internet Computer**
+- [ICP JavaScript Agent](https://www.npmjs.com/package/@dfinity/agent)
+- [ICP Developer Documentation](https://internetcomputer.org/docs)
+- [Chain-Key ECDSA Guide](https://internetcomputer.org/docs/current/developer-docs/integrations/t-ecdsa/)
+- [Developer Forum](https://forum.dfinity.org/)
+
+**DeFi Protocols**
+- [Uniswap V3 Documentation](https://docs.uniswap.org/protocol/introduction)
+- [EIP-1559 Transaction Format](https://eips.ethereum.org/EIPS/eip-1559)
+- [Ethereum JSON-RPC Specification](https://ethereum.org/en/developers/docs/apis/json-rpc/)
 
 ## License
 
@@ -421,13 +634,7 @@ MIT
 
 ## Support
 
-For issues or questions:
-- GitHub Issues: [ChainGuard SDK Issues](https://github.com/carlos-israelj/ChainGuard-SDK/issues)
-- ICP Forum: [Internet Computer Developer Forum](https://forum.dfinity.org/)
-
-## Resources
-
-- [ChainGuard SDK Documentation](../../README.md)
-- [ICP JavaScript Agent](https://www.npmjs.com/package/@dfinity/agent)
-- [ICP Developer Docs](https://internetcomputer.org/docs)
-- [Uniswap V3 Documentation](https://docs.uniswap.org/protocol/introduction)
+For issues, questions, or contributions:
+- **GitHub Issues**: Report bugs or request features
+- **ICP Forum**: [Internet Computer Developer Forum](https://forum.dfinity.org/)
+- **Documentation**: See [CLAUDE.md](../../CLAUDE.md) for comprehensive project guide
