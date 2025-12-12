@@ -4,6 +4,7 @@
 
 ChainGuard SDK enables AI agents to execute multi-chain transactions with enterprise-grade security through role-based access control, threshold signatures, policy enforcement, and complete auditability—all powered by ICP's Chain-Key cryptography.
 
+[![npm version](https://img.shields.io/npm/v/@chainguarsdk/sdk?style=flat-square&logo=npm)](https://www.npmjs.com/package/@chainguarsdk/sdk)
 [![Deployed on ICP](https://img.shields.io/badge/Deployed-IC%20Mainnet-3B00B9?style=flat-square&logo=internet-computer)](https://dashboard.internetcomputer.org/canister/foxtk-ziaaa-aaaai-atthq-cai)
 [![Tests Passing](https://img.shields.io/badge/Tests-90%2B%20Passing-18C39F?style=flat-square)](./src/chainguard/src)
 [![Rust](https://img.shields.io/badge/Rust-1.75+-ED1E79?style=flat-square&logo=rust)](https://www.rust-lang.org/)
@@ -206,6 +207,36 @@ dfx canister call chainguard request_action '(
 )' --network ic
 ```
 
+### Using the TypeScript SDK
+
+For application development, use the published npm package:
+
+```bash
+# Install the SDK
+npm install @chainguarsdk/sdk
+```
+
+```typescript
+import { ChainGuardClient } from '@chainguarsdk/sdk';
+
+// Initialize client
+const client = new ChainGuardClient({
+  canisterId: 'foxtk-ziaaa-aaaai-atthq-cai',
+});
+
+// Execute a transfer
+const result = await client.transfer(
+  'Sepolia',
+  'ETH',
+  '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0',
+  BigInt(1000000000000000)  // 0.001 ETH
+);
+
+console.log(result); // ActionResult
+```
+
+**See the complete [SDK documentation](./packages/sdk/) for all features and examples.**
+
 ---
 
 ## 🏗️ Architecture
@@ -287,17 +318,28 @@ dfx canister call chainguard request_action '(
 
 ### 🤖 Autonomous DeFi Strategies
 
+ChainGuard enables users to configure AI agents for automated trading strategies through an intuitive web interface:
+
+**User Workflow:**
+1. **Configure** strategies in the frontend dashboard
+2. **AI Agent** executes automatically based on schedule
+3. **Approve** threshold signatures when required
+4. **Monitor** results in audit logs
+
 **Dollar Cost Averaging (DCA)**
-- Automated purchases at regular intervals
+- Configure token pairs and purchase amounts via frontend
+- AI agent executes purchases at regular intervals
 - Policy-controlled amount limits
-- Complete execution history
+- Complete execution history visible in dashboard
 
 **Portfolio Rebalancing**
-- Maintain target allocations automatically
+- Set target allocations through web interface
+- AI agent maintains target allocations automatically
 - Threshold approvals for large rebalances
 - Deviation tracking and logging
 
 **Yield Farming**
+- Configure farming strategies in dashboard
 - Automated staking and reward claiming
 - Multi-chain position management
 - Risk-controlled execution
@@ -346,13 +388,19 @@ chainguard-sdk/
 │   │   ├── universal_router.rs  # Uniswap routing (21 tests)
 │   │   └── types.rs             # Type definitions
 │   └── chainguard.did           # Candid interface
+├── packages/sdk/                # TypeScript SDK (npm package)
+│   ├── src/
+│   │   ├── index.ts             # Exports & public API
+│   │   ├── client.ts            # ChainGuardClient class
+│   │   ├── types.ts             # TypeScript types
+│   │   └── idl.ts               # Candid IDL factory
+│   ├── package.json             # @chainguarsdk/sdk
+│   └── README.md                # SDK documentation
 ├── examples/ai-agent/           # AI Agent implementation
 │   ├── src/
 │   │   ├── strategies/
 │   │   │   ├── dca.ts           # Dollar Cost Averaging
 │   │   │   └── rebalance.ts     # Portfolio rebalancing
-│   │   ├── utils/
-│   │   │   └── chainguard-client.ts
 │   │   └── examples/demo.ts     # Complete demo
 │   └── README.md                # Agent documentation
 ├── frontend/                    # Next.js Dashboard
@@ -362,7 +410,7 @@ chainguard-sdk/
 │   │   ├── signatures/          # Threshold approvals
 │   │   └── audit/               # Audit logs viewer
 │   ├── lib/hooks/
-│   │   └── useChainGuard.tsx    # React integration
+│   │   └── useChainGuard.ts     # React integration
 │   └── components/
 │       └── NavigationLayout.tsx # Main layout
 └── CLAUDE.md                    # Comprehensive project guide

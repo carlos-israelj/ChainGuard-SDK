@@ -5,9 +5,9 @@
  * regardless of price. This reduces the impact of volatility.
  */
 
-import { ChainGuardClient } from '../utils/chainguard-client';
+import { ChainGuardClient } from '@chainguarsdk/sdk';
 import { ConfigManager } from '../utils/config';
-import { ActionResult } from '../types/chainguard';
+import { ActionResult } from '@chainguarsdk/sdk';
 
 export class DCAStrategy {
   private client: ChainGuardClient;

@@ -51,10 +51,37 @@ export default function StrategiesPage() {
   const handleExecuteNow = async () => {
     if (activeStrategy === 'dca') {
       console.log('Executing DCA now...');
-      // Call requestAction with Swap
+
+      // Get token addresses (in production, these would come from a token registry)
+      const tokenAddresses: Record<string, string> = {
+        'USDC': '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238',
+        'USDT': '0x...',
+        'DAI': '0x...',
+      };
+
+      const result = await requestAction({
+        Swap: {
+          chain: dcaConfig.chain,
+          token_in: tokenAddresses[dcaConfig.sourceToken] || dcaConfig.sourceToken,
+          token_out: dcaConfig.targetToken, // ETH
+          amount_in: BigInt(dcaConfig.amountPerPurchase),
+          min_amount_out: BigInt(1), // Minimum acceptable output
+          fee_tier: [3000], // 0.3% fee
+        }
+      });
+
+      if (result) {
+        if ('Executed' in result) {
+          alert('DCA executed successfully! TX: ' + (result.Executed.tx_hash[0] || 'pending'));
+        } else if ('PendingSignatures' in result) {
+          alert('DCA requires threshold signatures. Request ID: ' + result.PendingSignatures.id);
+        } else if ('Denied' in result) {
+          alert('DCA denied: ' + result.Denied.reason);
+        }
+      }
     } else {
       console.log('Executing Rebalance now...');
-      // Call rebalancing logic
+      alert('Rebalancing logic not yet implemented');
     }
   };
 

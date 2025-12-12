@@ -23,6 +23,25 @@ Thumbs.db
 # Logs
 *.log
 
+# Node.js
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# AI Agent
+examples/ai-agent/node_modules/
+examples/ai-agent/identity.pem
+examples/ai-agent/config.yaml
+
+# SDK
+packages/sdk/node_modules/
+packages/sdk/dist/
+
 # Internal documentation
 WEEK3_INTEGRATION.md
 CLAUDE.md

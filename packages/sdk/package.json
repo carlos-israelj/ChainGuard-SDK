@@ -1,0 +1,59 @@
+{
+  "name": "@chainguarsdk/sdk",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for ChainGuard - Security middleware for AI agents on Internet Computer Protocol",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "prepublishOnly": "npm run build",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "chainguard",
+    "icp",
+    "internet-computer",
+    "blockchain",
+    "security",
+    "ai-agents",
+    "defi",
+    "multi-chain",
+    "threshold-signatures",
+    "rbac"
+  ],
+  "author": "Israel Jimenez <cijimenej@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/carlos-israelj/ChainGuard-SDK.git",
+    "directory": "packages/sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/carlos-israelj/ChainGuard-SDK/issues"
+  },
+  "homepage": "https://github.com/carlos-israelj/ChainGuard-SDK#readme",
+  "peerDependencies": {
+    "@dfinity/agent": "^2.0.0",
+    "@dfinity/candid": "^2.0.0",
+    "@dfinity/principal": "^2.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@dfinity/agent": "^2.1.1",
+    "@dfinity/candid": "^2.1.1",
+    "@dfinity/identity": "^2.1.1",
+    "@dfinity/principal": "^2.1.1"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

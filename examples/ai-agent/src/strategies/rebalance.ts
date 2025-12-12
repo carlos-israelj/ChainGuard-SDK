@@ -5,9 +5,9 @@
  * Triggers when any asset deviates from target by more than threshold.
  */
 
-import { ChainGuardClient } from '../utils/chainguard-client';
+import { ChainGuardClient } from '@chainguarsdk/sdk';
 import { ConfigManager } from '../utils/config';
-import { ActionResult } from '../types/chainguard';
+import { ActionResult } from '@chainguarsdk/sdk';
 
 interface PortfolioAsset {
   token: string;

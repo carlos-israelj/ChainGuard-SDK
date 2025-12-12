@@ -1,5 +1,5 @@
 /**
- * TypeScript type definitions for ChainGuard Canister
+ * TypeScript type definitions for ChainGuard SDK
  * Generated from chainguard.did
  */
 

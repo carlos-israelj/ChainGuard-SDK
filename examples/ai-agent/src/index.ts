@@ -8,7 +8,7 @@ import * as cron from 'node-cron';
 import * as dotenv from 'dotenv';
 import * as fs from 'fs';
 import { Ed25519KeyIdentity } from '@dfinity/identity';
-import { ChainGuardClient } from './utils/chainguard-client';
+import { ChainGuardClient } from '@chainguarsdk/sdk';
 import { ConfigManager } from './utils/config';
 import { DCAStrategy } from './strategies/dca';
 import { RebalanceStrategy } from './strategies/rebalance';
