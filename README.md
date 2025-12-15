@@ -6,7 +6,8 @@ ChainGuard SDK enables AI agents to execute multi-chain transactions with enterp
 
 [![npm version](https://img.shields.io/npm/v/@chainguarsdk/sdk?style=flat-square&logo=npm)](https://www.npmjs.com/package/@chainguarsdk/sdk)
 [![Deployed on ICP](https://img.shields.io/badge/Deployed-IC%20Mainnet-3B00B9?style=flat-square&logo=internet-computer)](https://dashboard.internetcomputer.org/canister/foxtk-ziaaa-aaaai-atthq-cai)
-[![Tests Passing](https://img.shields.io/badge/Tests-90%2B%20Passing-18C39F?style=flat-square)](./src/chainguard/src)
+[![Tests Passing](https://img.shields.io/badge/Tests-109%2B%20Passing-18C39F?style=flat-square)](./src/chainguard/src)
+[![Version](https://img.shields.io/badge/Version-v0.1.1-blue?style=flat-square)](https://github.com/carlos-israelj/ChainGuard-SDK/releases/tag/v0.1.1)
 [![Rust](https://img.shields.io/badge/Rust-1.75+-ED1E79?style=flat-square&logo=rust)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](./LICENSE)
 
@@ -481,27 +482,28 @@ npm run rebalance # Portfolio Rebalancing
 
 ## 🗺️ Roadmap
 
-### ✅ Phase 1: Core Infrastructure (Completed)
+### ✅ Phase 1: Core Infrastructure (Completed - Q4 2024)
 
-**Q4 2024**
 - ✅ Role-based access control system
 - ✅ Policy engine with configurable conditions
 - ✅ Threshold signature implementation
 - ✅ EVM RPC integration with Chain-Key ECDSA
-- ✅ Uniswap V3 swap execution
-- ✅ Comprehensive test suite (90+ tests)
-- ✅ Sepolia testnet verification
+- ✅ Uniswap V3 swap execution via Universal Router
+- ✅ Comprehensive test suite (109+ tests)
+- ✅ Sepolia testnet verification (3 successful transactions)
 
-### 🔄 Phase 2: AI Agent & Frontend (Current)
+### ✅ Phase 2: AI Agent & Frontend (Completed - December 2024)
 
-**Q1 2025**
+**Released: v0.1.1**
+- ✅ TypeScript SDK published to npm (@chainguarsdk/sdk@0.1.1)
+- ✅ Stable memory implementation (state persists across upgrades)
 - ✅ TypeScript AI Agent with DCA/Rebalancing strategies
 - ✅ Next.js Dashboard with ICP design system
 - ✅ Real-time threshold signature monitoring
 - ✅ Complete audit trail visualization
-- 🟡 Production mainnet deployment
-- 🟡 Gas optimization and cost analysis
-- 🟡 Advanced strategy examples (yield farming, arbitrage)
+- ✅ Production mainnet deployment (canister: foxtk-ziaaa-aaaai-atthq-cai)
+- ✅ Frontend migrated to use SDK
+- ✅ Comprehensive documentation (4 READMEs + CLAUDE.md)
 
 ### 📋 Phase 3: Expansion & Optimization
 
