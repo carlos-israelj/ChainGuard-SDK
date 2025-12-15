@@ -1,20 +1,20 @@
-# @chainguard/sdk
+# @chainguarsdk/sdk
 
 > TypeScript SDK for ChainGuard - Security middleware for AI agents on Internet Computer Protocol
 
-[![npm version](https://img.shields.io/npm/v/@chainguard/sdk.svg?style=flat-square)](https://www.npmjs.com/package/@chainguard/sdk)
+[![npm version](https://img.shields.io/npm/v/@chainguarsdk/sdk.svg?style=flat-square)](https://www.npmjs.com/package/@chainguarsdk/sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](../../LICENSE)
 
 ## Installation
 
 ```bash
-npm install @chainguard/sdk
+npm install @chainguarsdk/sdk
 ```
 
 ## Quick Start
 
 ```typescript
-import { ChainGuardClient } from '@chainguard/sdk';
+import { ChainGuardClient } from '@chainguarsdk/sdk';
 
 // Initialize client
 const client = new ChainGuardClient({
@@ -46,7 +46,7 @@ console.log(result); // ActionResult (Executed | PendingSignatures | Denied)
 ### Initialization
 
 ```typescript
-import { ChainGuardClient } from '@chainguard/sdk';
+import { ChainGuardClient } from '@chainguarsdk/sdk';
 import { Ed25519KeyIdentity } from '@dfinity/identity';
 
 // Option 1: Auto-generated identity (for testing)
@@ -264,7 +264,7 @@ if (config) {
 ### AI Agent Integration
 
 ```typescript
-import { ChainGuardClient } from '@chainguard/sdk';
+import { ChainGuardClient } from '@chainguarsdk/sdk';
 
 class TradingBot {
   constructor(private guard: ChainGuardClient) {}
@@ -308,7 +308,7 @@ await bot.executeDCA(
 ### Multi-Sig Treasury
 
 ```typescript
-import { ChainGuardClient } from '@chainguard/sdk';
+import { ChainGuardClient } from '@chainguarsdk/sdk';
 import { Ed25519KeyIdentity } from '@dfinity/identity';
 
 // Signer 1
@@ -347,7 +347,7 @@ if ('PendingSignatures' in result) {
 
 ```typescript
 import { useState, useEffect } from 'react';
-import { ChainGuardClient } from '@chainguard/sdk';
+import { ChainGuardClient } from '@chainguarsdk/sdk';
 
 export function useChainGuard(canisterId: string) {
   const [client, setClient] = useState<ChainGuardClient | null>(null);

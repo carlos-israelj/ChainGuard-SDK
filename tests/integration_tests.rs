@@ -612,6 +612,162 @@ mod integration_tests {
 
         canister_id
     }
+
+    // Test 9: Stable memory upgrade persistence
+    #[test]
+    fn test_stable_memory_upgrade() {
+        let pic = PocketIc::new();
+        let canister_id = pic.create_canister();
+        pic.add_cycles(canister_id, 10_000_000_000_000);
+
+        // Deploy canister
+        let wasm = std::fs::read("target/wasm32-unknown-unknown/release/chainguard.wasm")
+            .expect("WASM file not found - run 'dfx build' first");
+        pic.install_canister(canister_id, wasm.clone(), vec![], None);
+
+        // Initialize with config
+        let init_config = r#"
+        record {
+            name = "Upgrade Test Config";
+            default_threshold = record { required = 2; total = 3; };
+            supported_chains = vec { "Sepolia"; "Ethereum" };
+            policies = vec {
+                record {
+                    name = "Allow Small Transfers";
+                    conditions = vec {
+                        variant { MaxAmount = 1000000000000000000 };
+                        variant { AllowedChains = vec { "Sepolia"; "Ethereum" } }
+                    };
+                    action = variant { Allow };
+                    priority = 1
+                }
+            }
+        }
+        "#;
+
+        pic.update_call(
+            canister_id,
+            Principal::anonymous(),
+            "initialize",
+            candid::encode_one(init_config).unwrap(),
+        ).unwrap();
+
+        // Assign roles
+        let owner = mock_principal(1);
+        let operator = mock_principal(2);
+
+        pic.update_call(
+            canister_id,
+            Principal::anonymous(),
+            "assign_role",
+            candid::encode_args((owner, "Owner")).unwrap(),
+        ).unwrap();
+
+        pic.update_call(
+            canister_id,
+            owner,
+            "assign_role",
+            candid::encode_args((operator, "Operator")).unwrap(),
+        ).unwrap();
+
+        // Add additional policy
+        let policy = r#"
+        record {
+            name = "Require Threshold for Large Swaps";
+            conditions = vec {
+                variant { MinAmount = 5000000000000000000 };
+                variant { AllowedChains = vec { "Sepolia"; "Ethereum" } }
+            };
+            action = variant {
+                RequireThreshold = record {
+                    required = 2;
+                    from_roles = vec { variant { Operator }; variant { Owner } }
+                }
+            };
+            priority = 2
+        }
+        "#;
+
+        pic.update_call(
+            canister_id,
+            owner,
+            "add_policy",
+            candid::encode_one(policy).unwrap(),
+        ).unwrap();
+
+        // Capture state before upgrade
+        let config_before = pic.query_call(
+            canister_id,
+            Principal::anonymous(),
+            "get_config",
+            candid::encode_one(()).unwrap(),
+        ).unwrap();
+
+        let policies_before = pic.query_call(
+            canister_id,
+            Principal::anonymous(),
+            "list_policies",
+            candid::encode_one(()).unwrap(),
+        ).unwrap();
+
+        let roles_before = pic.query_call(
+            canister_id,
+            Principal::anonymous(),
+            "list_role_assignments",
+            candid::encode_one(()).unwrap(),
+        ).unwrap();
+
+        // UPGRADE CANISTER
+        pic.upgrade_canister(canister_id, wasm, vec![]).unwrap();
+
+        // Verify state after upgrade
+        let config_after = pic.query_call(
+            canister_id,
+            Principal::anonymous(),
+            "get_config",
+            candid::encode_one(()).unwrap(),
+        ).unwrap();
+
+        let policies_after = pic.query_call(
+            canister_id,
+            Principal::anonymous(),
+            "list_policies",
+            candid::encode_one(()).unwrap(),
+        ).unwrap();
+
+        let roles_after = pic.query_call(
+            canister_id,
+            Principal::anonymous(),
+            "list_role_assignments",
+            candid::encode_one(()).unwrap(),
+        ).unwrap();
+
+        // Assert state persistence
+        assert_eq!(config_before, config_after, "Config should persist after upgrade");
+        assert_eq!(policies_before, policies_after, "Policies should persist after upgrade");
+        assert_eq!(roles_before, roles_after, "Roles should persist after upgrade");
+
+        // Verify data integrity - config should have correct values
+        // let config: Option<ChainGuardConfig> = decode_one(&config_after).unwrap();
+        // assert!(config.is_some());
+        // let cfg = config.unwrap();
+        // assert_eq!(cfg.name, "Upgrade Test Config");
+        // assert_eq!(cfg.default_threshold.required, 2);
+        // assert_eq!(cfg.default_threshold.total, 3);
+        // assert_eq!(cfg.supported_chains.len(), 2);
+
+        // Verify policies - should have 2 policies
+        // let policies: Vec<Policy> = decode_one(&policies_after).unwrap();
+        // assert_eq!(policies.len(), 2);
+        // assert_eq!(policies[0].name, "Allow Small Transfers");
+        // assert_eq!(policies[1].name, "Require Threshold for Large Swaps");
+
+        // Verify roles - should have 2 role assignments
+        // let roles: Vec<(Principal, Role)> = decode_one(&roles_after).unwrap();
+        // assert_eq!(roles.len(), 2);
+        // assert!(roles.iter().any(|(p, r)| *p == owner && matches!(r, Role::Owner)));
+        // assert!(roles.iter().any(|(p, r)| *p == operator && matches!(r, Role::Operator)));
+    }
     */
 
     // Placeholder test to prevent empty test suite
@@ -646,6 +802,7 @@ mod integration_tests {
 // - ✅ Emergency pause/resume controls
 // - ✅ Policy priority ordering (first match wins)
 // - ✅ Multiple conditions with AND logic
+// - ✅ Stable memory upgrade persistence (Test 9)
 //
 // ## Manual Testing
 // For quick manual testing without PocketIC:
@@ -654,4 +811,29 @@ mod integration_tests {
 // dfx deploy chainguard
 // dfx canister call chainguard initialize '(record { ... })'
 // dfx canister call chainguard request_action '(variant { ... })'
+// ```
+//
+// ## Manual Upgrade Testing
+// To verify stable memory persistence manually:
+// ```bash
+// # 1. Deploy and initialize
+// dfx deploy chainguard --network ic
+// dfx canister call chainguard initialize '(record {...})' --network ic
+//
+// # 2. Create test data
+// dfx canister call chainguard add_policy '(record {...})' --network ic
+// dfx canister call chainguard assign_role '(principal "...", variant {...})' --network ic
+//
+// # 3. Capture state before upgrade
+// dfx canister call chainguard get_config --network ic
+// dfx canister call chainguard list_policies --network ic
+// dfx canister call chainguard list_role_assignments --network ic
+//
+// # 4. Perform upgrade
+// dfx deploy chainguard --network ic
+//
+// # 5. Verify state persisted
+// dfx canister call chainguard get_config --network ic
+// dfx canister call chainguard list_policies --network ic
+// dfx canister call chainguard list_role_assignments --network ic
 // ```

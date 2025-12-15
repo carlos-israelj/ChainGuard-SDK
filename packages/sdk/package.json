@@ -1,12 +1,13 @@
 {
   "name": "@chainguarsdk/sdk",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "TypeScript SDK for ChainGuard - Security middleware for AI agents on Internet Computer Protocol",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
     "dist",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "scripts": {
@@ -31,7 +32,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/carlos-israelj/ChainGuard-SDK.git",
+    "url": "git+https://github.com/carlos-israelj/ChainGuard-SDK.git",
     "directory": "packages/sdk"
   },
   "bugs": {

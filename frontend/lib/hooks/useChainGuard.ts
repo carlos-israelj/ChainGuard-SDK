@@ -1,45 +1,46 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Actor, HttpAgent } from '@dfinity/agent';
+import { ChainGuardClient } from '@chainguarsdk/sdk';
+import type {
+  ActionResult,
+  PendingRequest,
+  AuditEntry,
+  Policy,
+  Action,
+  ChainGuardConfig
+} from '@chainguarsdk/sdk';
 import { Ed25519KeyIdentity } from '@dfinity/identity';
 import { Principal } from '@dfinity/principal';
-import { idlFactory } from '../types/idl';
-import type { ChainGuardService, ActionResult, PendingRequest, AuditEntry, Policy } from '../types/chainguard';
 
 const CANISTER_ID = 'foxtk-ziaaa-aaaai-atthq-cai';
 const HOST = 'https://icp-api.io';
 
 export function useChainGuard() {
-  const [actor, setActor] = useState<ChainGuardService | null>(null);
+  const [client, setClient] = useState<ChainGuardClient | null>(null);
   const [principal, setPrincipal] = useState<Principal | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Initialize agent and actor
+  // Initialize ChainGuard client
   useEffect(() => {
     async function init() {
       try {
-        // Generate identity (in production, use stored identity)
+        // Generate identity (in production, use Internet Identity or stored identity)
         const identity = Ed25519KeyIdentity.generate();
 
-        // Create agent
-        const agent = await HttpAgent.create({
+        // Create ChainGuard client with SDK
+        const clientInstance = new ChainGuardClient({
+          canisterId: CANISTER_ID,
           host: HOST,
           identity,
         });
 
-        // Create actor
-        const actorInstance = Actor.createActor<ChainGuardService>(idlFactory as any, {
-          agent,
-          canisterId: Principal.fromText(CANISTER_ID),
-        });
-
-        setActor(actorInstance);
+        setClient(clientInstance);
         setPrincipal(identity.getPrincipal());
         setLoading(false);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to initialize');
+        setError(err instanceof Error ? err.message : 'Failed to initialize ChainGuard client');
         setLoading(false);
       }
     }
@@ -47,87 +48,146 @@ export function useChainGuard() {
     init();
   }, []);
 
-  // Actions
-  const requestAction = useCallback(async (action: any): Promise<ActionResult | null> => {
-    if (!actor) return null;
+  // Request action (transfer, swap, approve)
+  const requestAction = useCallback(async (action: Action): Promise<ActionResult | null> => {
+    if (!client) return null;
     try {
-      return await actor.request_action(action);
+      return await client.requestAction(action);
     } catch (err) {
       console.error('Request action failed:', err);
       return null;
     }
-  }, [actor]);
+  }, [client]);
 
+  // Get pending threshold signature requests
   const getPendingRequests = useCallback(async (): Promise<PendingRequest[]> => {
-    if (!actor) return [];
+    if (!client) return [];
     try {
-      return await actor.get_pending_requests();
+      return await client.getPendingRequests();
     } catch (err) {
       console.error('Get pending requests failed:', err);
       return [];
     }
-  }, [actor]);
+  }, [client]);
 
+  // Sign a pending request
   const signRequest = useCallback(async (requestId: bigint) => {
-    if (!actor) return null;
+    if (!client) return null;
     try {
-      return await actor.sign_request(requestId);
+      return await client.signRequest(requestId);
     } catch (err) {
       console.error('Sign request failed:', err);
       return null;
     }
-  }, [actor]);
+  }, [client]);
 
+  // Get audit logs
   const getAuditLogs = useCallback(async (start?: bigint, end?: bigint): Promise<AuditEntry[]> => {
-    if (!actor) return [];
+    if (!client) return [];
     try {
-      return await actor.get_audit_logs(start ? [start] : [], end ? [end] : []);
+      return await client.getAuditLogs(start, end);
     } catch (err) {
       console.error('Get audit logs failed:', err);
       return [];
     }
-  }, [actor]);
+  }, [client]);
 
+  // List all policies
   const listPolicies = useCallback(async (): Promise<Policy[]> => {
-    if (!actor) return [];
+    if (!client) return [];
     try {
-      return await actor.list_policies();
+      return await client.listPolicies();
     } catch (err) {
       console.error('List policies failed:', err);
       return [];
     }
-  }, [actor]);
+  }, [client]);
 
-  const getConfig = useCallback(async () => {
-    if (!actor) return null;
+  // Get canister configuration
+  const getConfig = useCallback(async (): Promise<ChainGuardConfig | null> => {
+    if (!client) return null;
     try {
-      const result = await actor.get_config();
-      return result.length > 0 ? result[0] : null;
+      const result = await client.getConfig();
+      return result || null;
     } catch (err) {
       console.error('Get config failed:', err);
       return null;
     }
-  }, [actor]);
+  }, [client]);
 
+  // Check if canister is paused
   const isPaused = useCallback(async (): Promise<boolean> => {
-    if (!actor) return false;
+    if (!client) return false;
     try {
-      return await actor.is_paused();
+      return await client.isPaused();
     } catch (err) {
-      console.error('Is paused check failed:', err);
+      console.error('Check paused status failed:', err);
       return false;
     }
-  }, [actor]);
+  }, [client]);
+
+  // Helper methods for common actions
+  const transfer = useCallback(async (
+    chain: string,
+    token: string,
+    to: string,
+    amount: bigint
+  ): Promise<ActionResult | null> => {
+    if (!client) return null;
+    try {
+      return await client.transfer(chain, token, to, amount);
+    } catch (err) {
+      console.error('Transfer failed:', err);
+      return null;
+    }
+  }, [client]);
+
+  const swap = useCallback(async (
+    chain: string,
+    tokenIn: string,
+    tokenOut: string,
+    amountIn: bigint,
+    minAmountOut: bigint,
+    feeTier?: number
+  ): Promise<ActionResult | null> => {
+    if (!client) return null;
+    try {
+      return await client.swap(chain, tokenIn, tokenOut, amountIn, minAmountOut, feeTier);
+    } catch (err) {
+      console.error('Swap failed:', err);
+      return null;
+    }
+  }, [client]);
+
+  const approveToken = useCallback(async (
+    chain: string,
+    token: string,
+    spender: string,
+    amount: bigint
+  ): Promise<ActionResult | null> => {
+    if (!client) return null;
+    try {
+      return await client.approveToken(chain, token, spender, amount);
+    } catch (err) {
+      console.error('Approve token failed:', err);
+      return null;
+    }
+  }, [client]);
 
   return {
-    actor,
+    client,
     principal,
     loading,
     error,
-    // Methods
+    // Actions
     requestAction,
+    transfer,
+    swap,
+    approveToken,
+    // Threshold signatures
     getPendingRequests,
     signRequest,
+    // Audit & monitoring
     getAuditLogs,
     listPolicies,
     getConfig,

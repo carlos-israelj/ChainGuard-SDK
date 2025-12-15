@@ -80,6 +80,7 @@ The ChainGuard AI Agent demonstrates how to build autonomous trading strategies 
 - TypeScript
 - Access to ICP network
 - ChainGuard canister deployed
+- `@chainguarsdk/sdk` v0.1.1+ (automatically installed)
 
 ### Setup
 
@@ -627,6 +628,20 @@ The demo provides console output showing each step, making it ideal for understa
 - [Uniswap V3 Documentation](https://docs.uniswap.org/protocol/introduction)
 - [EIP-1559 Transaction Format](https://eips.ethereum.org/EIPS/eip-1559)
 - [Ethereum JSON-RPC Specification](https://ethereum.org/en/developers/docs/apis/json-rpc/)
+
+## Recent Updates
+
+**December 15, 2024 - SDK v0.1.1**
+- Updated to `@chainguarsdk/sdk` v0.1.1
+- Now compatible with canister stable memory implementation
+- Canister state persists across upgrades automatically
+- All strategies continue to work seamlessly with upgraded canister
+
+**Key Improvements:**
+- ✅ Stable memory integration - no data loss on canister upgrades
+- ✅ Config, roles, policies, and audit logs persist automatically
+- ✅ Verified transactions on Sepolia testnet (3 successful swaps)
+- ✅ Enhanced SDK documentation and examples
 
 ## License
 

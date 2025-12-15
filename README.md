@@ -37,7 +37,8 @@ ChainGuard SDK enables AI agents to execute multi-chain transactions with enterp
 
 **Verified Transactions:**
 - ✅ **ETH Transfer**: [0xfd8d8b...240ad](https://sepolia.etherscan.io/tx/0xfd8d8b026020e08b06f575702661a76a074c6e34d23f326d84395fec0f9240ad)
-- ✅ **USDC→ETH Swap**: [0x5c18f7...f65a9](https://sepolia.etherscan.io/tx/0x5c18f7f6d0bd486d010caa31ba1a0c88bc6d871474d929c6758d224ee72f65a9)
+- ✅ **ETH→USDC Swap**: [0x9c30a3...f4db9](https://sepolia.etherscan.io/tx/0x9c30a38f4e0f58bc1dd29c34c5e3f7c31d8dc3f7bab8d31dc0e3ec5eae0f4db9)
+- ✅ **USDC→ETH Swap**: [0xbfbdab...8652a](https://sepolia.etherscan.io/tx/0xbfbdab70dd24fcb72c70b60f94096c67ca5cf949e3e99d201ba088377ed8652a)
 
 ---
 

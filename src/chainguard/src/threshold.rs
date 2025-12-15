@@ -131,6 +131,18 @@ impl ThresholdSigner {
             }
         }
     }
+
+    // Restore request from stable memory (for post_upgrade)
+    pub fn restore_request(&mut self, request: PendingRequest) -> Result<(), String> {
+        // Update next_id if needed
+        if request.id >= self.next_id {
+            self.next_id = request.id + 1;
+        }
+
+        // Insert the request
+        self.pending_requests.insert(request.id, request);
+        Ok(())
+    }
 }
 
 impl Default for ThresholdSigner {

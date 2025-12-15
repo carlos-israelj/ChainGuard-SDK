@@ -70,6 +70,18 @@ impl AuditLog {
         self.entries.iter().find(|e| e.id == id)
     }
 
+    // Restore entry from stable memory (for post_upgrade)
+    pub fn restore_entry(&mut self, entry: AuditEntry) -> Result<(), String> {
+        // Update next_id if needed
+        if entry.id >= self.next_id {
+            self.next_id = entry.id + 1;
+        }
+
+        // Insert the entry
+        self.entries.push(entry);
+        Ok(())
+    }
+
     fn action_type_string(action: &Action) -> String {
         match action {
             Action::Swap { .. } => "swap".to_string(),

@@ -1,7 +1,8 @@
 use candid::Principal;
 use ic_cdk::api::time;
-use ic_cdk_macros::{init, query, update};
+use ic_cdk_macros::{init, pre_upgrade, post_upgrade, query, update};
 use std::cell::RefCell;
+use std::collections::HashMap;
 
 mod types;
 mod access_control;
@@ -13,6 +14,7 @@ mod evm_rpc;
 mod config;
 mod abi;
 mod universal_router;
+mod stable_memory;
 
 use types::*;
 use access_control::AccessControl;
@@ -455,6 +457,99 @@ async fn get_eth_address() -> Result<String, String> {
 
     let evm_executor = EvmRpcExecutor::new(key_name, derivation_path)?;
     evm_executor.get_eth_address().await
+}
+
+// ============== UPGRADE HOOKS ==============
+
+#[pre_upgrade]
+fn pre_upgrade() {
+    ic_cdk::println!("Starting pre_upgrade hook...");
+
+    // Extract complete state from heap memory
+    STATE.with(|state| {
+        let state = state.borrow();
+
+        // Store config
+        if let Some(config) = &state.config {
+            let _ = stable_memory::store_config(config);
+        }
+
+        // Store all roles
+        let roles = state.access_control.list_role_assignments();
+        let role_map: HashMap<Principal, Vec<Role>> = roles.iter()
+            .fold(HashMap::new(), |mut acc, (principal, role)| {
+                acc.entry(*principal)
+                    .or_insert_with(Vec::new)
+                    .push(role.clone());
+                acc
+            });
+
+        for (principal, roles) in role_map.iter() {
+            let _ = stable_memory::store_role(principal, roles);
+        }
+
+        // Store all policies
+        let policies = state.access_control.get_policies();
+        for (index, policy) in policies.iter().enumerate() {
+            let _ = stable_memory::store_policy(index as u64, policy);
+        }
+
+        // Store all pending requests
+        let pending_requests = state.threshold_signer.get_pending_requests();
+        for request in pending_requests {
+            let _ = stable_memory::store_pending_request(&request);
+        }
+
+        // Store all audit entries
+        let audit_entries = state.audit_log.get_entries(None, None);
+        for entry in audit_entries {
+            let _ = stable_memory::store_audit_entry(&entry);
+        }
+
+        ic_cdk::println!("Pre_upgrade complete. State serialized to stable memory.");
+    });
+}
+
+#[post_upgrade]
+fn post_upgrade() {
+    ic_cdk::println!("Starting post_upgrade hook...");
+
+    STATE.with(|state| {
+        let mut state = state.borrow_mut();
+
+        // Restore config
+        if let Some(config) = stable_memory::load_config() {
+            state.config = Some(config);
+        }
+
+        // Restore roles
+        let roles = stable_memory::load_all_roles();
+        for (principal, role_list) in roles {
+            for role in role_list {
+                state.access_control.assign_role(principal, role);
+            }
+        }
+
+        // Restore policies
+        let policies = stable_memory::load_all_policies();
+        for policy in policies {
+            state.access_control.add_policy(policy);
+        }
+
+        // Restore pending requests
+        let pending_requests = stable_memory::load_all_pending_requests();
+        for request in pending_requests {
+            let _ = state.threshold_signer.restore_request(request);
+        }
+
+        // Restore audit entries
+        let audit_entries = stable_memory::load_all_audit_entries();
+        for entry in audit_entries {
+            let _ = state.audit_log.restore_entry(entry);
+        }
+
+        ic_cdk::println!("Post_upgrade complete. State restored from stable memory.");
+    });
 }
 
 // Export Candid interface
