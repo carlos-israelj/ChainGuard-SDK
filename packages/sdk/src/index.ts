@@ -16,6 +16,7 @@ export type {
   SwapAction,
   TransferAction,
   ApproveTokenAction,
+  BitcoinTransferAction,
 
   // Execution
   ActionResult,

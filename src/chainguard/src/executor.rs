@@ -1,5 +1,7 @@
 use crate::types::*;
 use crate::evm_rpc::EvmRpcExecutor;
+use crate::btc_rpc::BtcRpcExecutor;
+use crate::btc_address::BitcoinAddress;
 use ic_cdk::api::management_canister::ecdsa::{
     ecdsa_public_key, sign_with_ecdsa, EcdsaCurve, EcdsaKeyId, EcdsaPublicKeyArgument, SignWithEcdsaArgument,
 };
@@ -61,6 +63,9 @@ impl ChainExecutor {
             Action::ApproveToken { chain, token, spender, amount } => {
                 self.execute_approve(chain, token, spender, *amount).await
             }
+            Action::BitcoinTransfer { to, amount, network } => {
+                self.execute_bitcoin_transfer(network, to, *amount).await
+            }
         }
     }
 
@@ -72,7 +77,12 @@ impl ChainExecutor {
         to: &str,
         amount: u64,
     ) -> ExecutionResult {
-        // Create EVM RPC executor
+        // Check if it's a Bitcoin chain
+        if chain == "Bitcoin" || chain == "BitcoinTestnet" {
+            return self.execute_bitcoin_transfer(chain, to, amount).await;
+        }
+
+        // Create EVM RPC executor for Ethereum chains
         let evm_executor = match EvmRpcExecutor::new(
             self.key_name.clone(),
             self.derivation_path.clone(),
@@ -498,6 +508,100 @@ impl ChainExecutor {
     }
 
     // Removed: get_rpc_service - no longer needed with EVM RPC canister approach
+
+    /// Execute a Bitcoin transfer
+    async fn execute_bitcoin_transfer(
+        &self,
+        network: &str,
+        to: &str,
+        amount: u64,
+    ) -> ExecutionResult {
+        // Get Bitcoin address for this canister
+        let from_address = match self.get_bitcoin_address(network).await {
+            Ok(addr) => addr,
+            Err(e) => {
+                return ExecutionResult {
+                    success: false,
+                    chain: network.to_string(),
+                    tx_hash: None,
+                    error: Some(format!("Failed to get Bitcoin address: {}", e)),
+                }
+            }
+        };
+
+        // Get public key for signing
+        let public_key = match BitcoinAddress::get_public_key(
+            self.key_name.clone(),
+            self.derivation_path.clone(),
+        )
+        .await
+        {
+            Ok(pk) => pk,
+            Err(e) => {
+                return ExecutionResult {
+                    success: false,
+                    chain: network.to_string(),
+                    tx_hash: None,
+                    error: Some(format!("Failed to get public key: {}", e.to_string())),
+                }
+            }
+        };
+
+        // Create Bitcoin RPC executor
+        let btc_executor = match BtcRpcExecutor::new(network) {
+            Ok(executor) => executor,
+            Err(e) => {
+                return ExecutionResult {
+                    success: false,
+                    chain: network.to_string(),
+                    tx_hash: None,
+                    error: Some(format!("Failed to create Bitcoin executor: {}", e.to_string())),
+                }
+            }
+        };
+
+        // Execute the transfer with signing parameters
+        match btc_executor
+            .transfer(
+                &from_address,
+                to,
+                amount,
+                self.key_name.clone(),
+                self.derivation_path.clone(),
+                &public_key,
+            )
+            .await
+        {
+            Ok(msg) => ExecutionResult {
+                success: true,
+                chain: network.to_string(),
+                tx_hash: Some(msg),
+                error: None,
+            },
+            Err(e) => ExecutionResult {
+                success: false,
+                chain: network.to_string(),
+                tx_hash: None,
+                error: Some(format!("Bitcoin transfer failed: {}", e.to_string())),
+            },
+        }
+    }
+
+    /// Get Bitcoin address for this canister
+    pub async fn get_bitcoin_address(&self, network: &str) -> Result<String, String> {
+        // Get public key
+        let pubkey = BitcoinAddress::get_public_key(
+            self.key_name.clone(),
+            self.derivation_path.clone(),
+        )
+        .await
+        .map_err(|e| format!("Failed to get public key: {}", e.to_string()))?;
+
+        // Generate P2WPKH address (SegWit - most common)
+        let testnet = network == "BitcoinTestnet";
+        BitcoinAddress::public_key_to_p2wpkh(&pubkey, testnet)
+            .map_err(|e| format!("Failed to generate address: {}", e.to_string()))
+    }
 
     /// Sign a message with Chain-Key ECDSA
     pub async fn sign_message(&self, message: &[u8]) -> Result<Vec<u8>, String> {

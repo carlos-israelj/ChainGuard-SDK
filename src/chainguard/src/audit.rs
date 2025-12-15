@@ -75,6 +75,7 @@ impl AuditLog {
             Action::Swap { .. } => "swap".to_string(),
             Action::Transfer { .. } => "transfer".to_string(),
             Action::ApproveToken { .. } => "approve".to_string(),
+            Action::BitcoinTransfer { .. } => "bitcoin_transfer".to_string(),
         }
     }
 
@@ -98,6 +99,12 @@ impl AuditLog {
                 format!(
                     r#"{{"chain":"{}","token":"{}","spender":"{}","amount":{}}}"#,
                     chain, token, spender, amount
+                )
+            }
+            Action::BitcoinTransfer { to, amount, network } => {
+                format!(
+                    r#"{{"network":"{}","to":"{}","amount":{}}}"#,
+                    network, to, amount
                 )
             }
         }

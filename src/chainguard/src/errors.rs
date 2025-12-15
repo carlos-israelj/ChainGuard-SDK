@@ -26,6 +26,10 @@ pub enum ChainGuardError {
     // Execution errors
     ExecutionFailed { reason: String },
     ChainNotSupported { chain: String },
+    InsufficientFunds { msg: String },
+    InvalidInput { msg: String },
+    UnsupportedChain { msg: String },
+    NotImplemented { feature: String },
 
     // System errors
     SystemPaused,
@@ -62,6 +66,18 @@ impl ChainGuardError {
             }
             ChainGuardError::ChainNotSupported { chain } => {
                 format!("Chain not supported: {}", chain)
+            }
+            ChainGuardError::InsufficientFunds { msg } => {
+                format!("Insufficient funds: {}", msg)
+            }
+            ChainGuardError::InvalidInput { msg } => {
+                format!("Invalid input: {}", msg)
+            }
+            ChainGuardError::UnsupportedChain { msg } => {
+                format!("Unsupported chain: {}", msg)
+            }
+            ChainGuardError::NotImplemented { feature } => {
+                format!("Feature not yet implemented: {}", feature)
             }
             ChainGuardError::SystemPaused => "System is currently paused".to_string(),
             ChainGuardError::InternalError { msg } => format!("Internal error: {}", msg),

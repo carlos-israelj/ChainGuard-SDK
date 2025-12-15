@@ -33,11 +33,13 @@ ChainGuard SDK enables AI agents to execute multi-chain transactions with enterp
 |-----------|---------|---------------------|----------|
 | **ChainGuard Canister** | IC Mainnet | `foxtk-ziaaa-aaaai-atthq-cai` | [Dashboard](https://dashboard.internetcomputer.org/canister/foxtk-ziaaa-aaaai-atthq-cai) |
 | **ETH Address (Sepolia)** | Sepolia Testnet | `0xfdd0e2016079951225bd88a41b1b7295aa995cad` | [Etherscan](https://sepolia.etherscan.io/address/0xfdd0e2016079951225bd88a41b1b7295aa995cad) |
+| **BTC Address (Testnet)** | Bitcoin Testnet | `tb1q5pc5mfz2xav022kalwnefe447p9zvnrv8058pa` | [Blockstream](https://blockstream.info/testnet/address/tb1q5pc5mfz2xav022kalwnefe447p9zvnrv8058pa) |
 | **Frontend Dashboard** | Localhost | `http://localhost:3000` | Development |
 
 **Verified Transactions:**
 - ✅ **ETH Transfer**: [0xfd8d8b...240ad](https://sepolia.etherscan.io/tx/0xfd8d8b026020e08b06f575702661a76a074c6e34d23f326d84395fec0f9240ad)
 - ✅ **USDC→ETH Swap**: [0x5c18f7...f65a9](https://sepolia.etherscan.io/tx/0x5c18f7f6d0bd486d010caa31ba1a0c88bc6d871474d929c6758d224ee72f65a9)
+- ✅ **Bitcoin Transfer**: Executed successfully (5,000 satoshis) - [See Test Results](./BITCOIN_TEST_RESULTS.md)
 
 ---
 
@@ -110,12 +112,23 @@ ChainGuard SDK provides a **decentralized security middleware** that sits betwee
 
 ### 🌐 Multi-Chain Support
 
-| Chain | Status | Features |
-|-------|--------|----------|
-| **Ethereum Mainnet** | ✅ Ready | Transfers, Swaps (Uniswap V3), ERC20 |
-| **Sepolia Testnet** | ✅ Verified | Full testing environment |
-| **Bitcoin** | 🟡 Planned | Q1 2025 integration |
-| **Other EVM Chains** | 🟡 Extensible | Configurable via RPC endpoints |
+| Chain | Status | Features | Address Format |
+|-------|--------|----------|----------------|
+| **Ethereum Mainnet** | ✅ Ready | Transfers, Swaps (Uniswap V3), ERC20 | 0x... |
+| **Sepolia Testnet** | ✅ Verified | Full testing environment | 0x... |
+| **Bitcoin Mainnet** | ✅ Ready | Native BTC transfers, UTXO management | bc1... (P2WPKH/P2TR) |
+| **Bitcoin Testnet** | ✅ Ready | Full testing with testnet BTC | tb1... (P2WPKH/P2TR) |
+| **Other EVM Chains** | 🟡 Extensible | Configurable via RPC endpoints | 0x... |
+
+**Bitcoin Integration Features:**
+- ✅ P2PKH (Legacy) address support with manual DER signature encoding
+- ✅ P2WPKH (SegWit v0) with BIP143 sighash implementation
+- ✅ P2TR (Taproot) address generation (signing limited by ICP ECDSA)
+- ✅ UTXO management with greedy selection algorithm
+- ✅ Dynamic fee estimation using Bitcoin canister's fee percentiles
+- ✅ Change output handling (dust limit: 546 satoshis)
+- ✅ Integration with ICP's Bitcoin canister for mainnet/testnet
+- ✅ Chain-Key ECDSA signing for Bitcoin transactions
 
 ---
 
@@ -193,6 +206,7 @@ dfx canister call chainguard initialize '(
 
 ### Execute Your First Transaction
 
+**Ethereum Transfer:**
 ```bash
 # Request ETH transfer (will be evaluated by policies)
 dfx canister call chainguard request_action '(
@@ -202,6 +216,24 @@ dfx canister call chainguard request_action '(
       token = "ETH";
       to = "0x648a3e5510f55B4995fA5A22cCD62e2586ACb901";
       amount = 1000000000000000  # 0.001 ETH
+    }
+  }
+)' --network ic
+```
+
+**Bitcoin Transfer:**
+```bash
+# Get your Bitcoin testnet address
+dfx canister call chainguard get_bitcoin_address '("BitcoinTestnet")' --network ic
+# Returns: "tb1q..."
+
+# Send Bitcoin (100,000 satoshis = 0.001 BTC)
+dfx canister call chainguard request_action '(
+  variant {
+    BitcoinTransfer = record {
+      to = "tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx";
+      amount = 100000;
+      network = "BitcoinTestnet"
     }
   }
 )' --network ic
@@ -224,15 +256,26 @@ const client = new ChainGuardClient({
   canisterId: 'foxtk-ziaaa-aaaai-atthq-cai',
 });
 
-// Execute a transfer
-const result = await client.transfer(
+// Ethereum transfer
+const ethResult = await client.transfer(
   'Sepolia',
   'ETH',
   '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0',
   BigInt(1000000000000000)  // 0.001 ETH
 );
 
-console.log(result); // ActionResult
+// Bitcoin transfer
+const btcResult = await client.bitcoinTransfer(
+  'tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx',  // Recipient address
+  BigInt(100000),                                   // 0.001 BTC in satoshis
+  'BitcoinTestnet'
+);
+
+// Get Bitcoin address
+const addressResult = await client.getBitcoinAddress('BitcoinTestnet');
+if ('Ok' in addressResult) {
+  console.log('Bitcoin Address:', addressResult.Ok);
+}
 ```
 
 **See the complete [SDK documentation](./packages/sdk/) for all features and examples.**
@@ -263,7 +306,7 @@ console.log(result); // ActionResult
 │  │        Multi-Chain Executor               │ │                │
 │  │  ┌─────────────┐    ┌─────────────┐     │ │                │
 │  │  │ EVM RPC     │    │ Bitcoin     │     │ │                │
-│  │  │ Executor    │    │ (Planned)   │     │ │                │
+│  │  │ Executor    │    │ Executor    │     │ │                │
 │  │  └─────────────┘    └─────────────┘     │ │                │
 │  └──────────────────────────────────────────┘ │                │
 │                                                │                │
@@ -274,10 +317,10 @@ console.log(result); // ActionResult
              │                       │
              │ Chain-Key ECDSA       │ EVM RPC Canister
              ▼                       ▼
-   ┌──────────────────┐    ┌──────────────────┐
-   │ ICP Threshold    │    │ Ethereum/Sepolia │
-   │ ECDSA Subnet     │    │ (via Alchemy)    │
-   └──────────────────┘    └──────────────────┘
+   ┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐
+   │ ICP Threshold    │    │ Ethereum/Sepolia │    │ Bitcoin Network  │
+   │ ECDSA Subnet     │    │ (via Alchemy)    │    │ (via BTC Canister│
+   └──────────────────┘    └──────────────────┘    └──────────────────┘
 ```
 
 ### Transaction Lifecycle

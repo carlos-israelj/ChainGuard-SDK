@@ -33,6 +33,11 @@ type Action = variant {
         spender : text;
         amount : nat64;
     };
+    BitcoinTransfer : record {
+        to : text;
+        amount : nat64;
+        network : text;
+    };
 };
 
 type ActionResult = variant {
@@ -160,4 +165,6 @@ service : {
 
     // Info
     get_config : () -> (opt ChainGuardConfig) query;
+    get_eth_address : () -> (variant { Ok : text; Err : text });
+    get_bitcoin_address : (text) -> (variant { Ok : text; Err : text });
 }

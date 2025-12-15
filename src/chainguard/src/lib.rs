@@ -10,6 +10,10 @@ mod audit;
 mod errors;
 mod executor;
 mod evm_rpc;
+mod btc_rpc;
+mod btc_address;
+mod btc_signing;
+mod btc_transaction;
 mod config;
 mod abi;
 mod universal_router;
@@ -455,6 +459,42 @@ async fn get_eth_address() -> Result<String, String> {
 
     let evm_executor = EvmRpcExecutor::new(key_name, derivation_path)?;
     evm_executor.get_eth_address().await
+}
+
+#[update]
+async fn get_bitcoin_address(network: String) -> Result<String, String> {
+    use crate::btc_signing::get_p2wpkh_address;
+
+    let (key_name, derivation_path) = STATE.with(|state| {
+        let s = state.borrow();
+        (s.executor.key_name.clone(), s.executor.derivation_path.clone())
+    });
+
+    // Map network string to bitcoin::Network
+    let btc_network = match network.as_str() {
+        "Bitcoin" => bitcoin::Network::Bitcoin,
+        "BitcoinTestnet" => bitcoin::Network::Testnet,
+        _ => return Err("Unsupported network".to_string()),
+    };
+
+    get_p2wpkh_address(key_name, derivation_path, btc_network)
+        .await
+        .map_err(|e| format!("{:?}", e))
+}
+
+// ============== HTTP OUTCALL TRANSFORM ==============
+
+/// Transform function for Blockstream API HTTP responses
+/// This is required for HTTP outcalls to work in consensus
+#[query]
+fn transform_blockstream_response(args: ic_cdk::api::management_canister::http_request::TransformArgs) -> ic_cdk::api::management_canister::http_request::HttpResponse {
+    // Simply return the response as-is
+    // In production, you might want to strip headers or normalize the response
+    ic_cdk::api::management_canister::http_request::HttpResponse {
+        status: args.response.status,
+        headers: vec![], // Remove headers for consensus
+        body: args.response.body,
+    }
 }
 
 // Export Candid interface

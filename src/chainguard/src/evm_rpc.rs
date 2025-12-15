@@ -1,15 +1,14 @@
 use candid::{Nat, Principal};
 use serde_bytes::ByteBuf;
+use std::str::FromStr;
 use ethers_core::types::{
     transaction::eip1559::Eip1559TransactionRequest, Bytes, Signature, U256, U64,
 };
 use ethers_core::utils::keccak256;
-use evm_rpc_canister_types::{
+use evm_rpc_types::{
     BlockTag, EthSepoliaService, FeeHistoryArgs, GetTransactionCountArgs,
-    GetTransactionReceiptResult, MultiGetTransactionCountResult,
-    MultiGetTransactionReceiptResult, MultiFeeHistoryResult,
-    MultiSendRawTransactionResult, RpcApi, RpcConfig, RpcService, RpcServices,
-    SendRawTransactionStatus,
+    RpcApi, RpcConfig, RpcService, RpcServices, SendRawTransactionStatus,
+    TransactionReceipt, FeeHistory, RpcError, Hex20, Nat256,
 };
 use ic_cdk::api::call::call_with_payment128;
 use ic_cdk::api::management_canister::ecdsa::{
@@ -255,11 +254,11 @@ impl EvmRpcExecutor {
         let rpc_service = self.get_rpc_service(chain)?;
 
         let args = GetTransactionCountArgs {
-            address: address.to_string(),
+            address: Hex20::from_str(address).map_err(|e| format!("Invalid address: {:?}", e))?,
             block: BlockTag::Latest,
         };
 
-        let result: (MultiGetTransactionCountResult,) = call_with_payment128(
+        let result: (Result<Nat, RpcError>,) = call_with_payment128(
             self.evm_rpc_canister,
             "eth_getTransactionCount",
             (rpc_service, None::<()>, args),
@@ -269,19 +268,8 @@ impl EvmRpcExecutor {
         .map_err(|e| format!("Failed to call eth_getTransactionCount: {:?}", e))?;
 
         match result.0 {
-            MultiGetTransactionCountResult::Consistent(count_result) => {
-                match count_result {
-                    evm_rpc_canister_types::GetTransactionCountResult::Ok(count) => {
-                        self.nat_to_u256(&count)
-                    }
-                    evm_rpc_canister_types::GetTransactionCountResult::Err(e) => {
-                        Err(format!("RPC error: {:?}", e))
-                    }
-                }
-            }
-            MultiGetTransactionCountResult::Inconsistent(_) => {
-                Err("Inconsistent results from RPC providers".to_string())
-            }
+            Ok(count) => self.nat_to_u256(&count),
+            Err(e) => Err(format!("RPC error: {:?}", e)),
         }
     }
 
@@ -290,12 +278,12 @@ impl EvmRpcExecutor {
         let rpc_service = self.get_rpc_service(chain)?;
 
         let args = FeeHistoryArgs {
-            blockCount: Nat::from(9u8),
-            newestBlock: BlockTag::Latest,
-            rewardPercentiles: Some(ByteBuf::from(vec![95u8])),
+            block_count: Nat256::from(9u64),
+            newest_block: BlockTag::Latest,
+            reward_percentiles: Some(vec![95u8]),
         };
 
-        let result: (MultiFeeHistoryResult,) = call_with_payment128(
+        let result: (Result<FeeHistory, RpcError>,) = call_with_payment128(
             self.evm_rpc_canister,
             "eth_feeHistory",
             (rpc_service, None::<()>, args),
@@ -305,38 +293,29 @@ impl EvmRpcExecutor {
         .map_err(|e| format!("Failed to call eth_feeHistory: {:?}", e))?;
 
         let fee_history = match result.0 {
-            MultiFeeHistoryResult::Consistent(history_result) => {
-                match history_result {
-                    evm_rpc_canister_types::FeeHistoryResult::Ok(history) => history,
-                    evm_rpc_canister_types::FeeHistoryResult::Err(e) => {
-                        return Err(format!("RPC error: {:?}", e));
-                    }
-                }
-            }
-            MultiFeeHistoryResult::Inconsistent(_) => {
-                return Err("Inconsistent results from RPC providers".to_string());
-            }
+            Ok(history) => history,
+            Err(e) => return Err(format!("RPC error: {:?}", e)),
         };
 
         let base_fee_per_gas = fee_history
-            .baseFeePerGas
+            .base_fee_per_gas
             .last()
             .ok_or("No base fee available")?;
 
         let rewards = fee_history.reward;
-        let mut percentile_95: Vec<Nat> = rewards
+        let percentile_95: Vec<Nat256> = rewards
             .into_iter()
             .flat_map(|x| x.into_iter())
             .collect();
-        percentile_95.sort();
 
+        // Use the first reward value instead of median (simplified approach)
         let median_reward = percentile_95
-            .get(percentile_95.len() / 2)
-            .unwrap_or(&Nat::from(0u8))
+            .first()
+            .unwrap_or(&Nat256::from(0u64))
             .clone();
 
-        let max_priority_fee_per_gas = self.nat_to_u256(&median_reward)?;
-        let max_fee_per_gas = self.nat_to_u256(base_fee_per_gas)? + max_priority_fee_per_gas;
+        let max_priority_fee_per_gas = self.nat256_to_u256(&median_reward)?;
+        let max_fee_per_gas = self.nat256_to_u256(base_fee_per_gas)? + max_priority_fee_per_gas;
 
         Ok(FeeEstimates {
             max_fee_per_gas,
@@ -354,7 +333,7 @@ impl EvmRpcExecutor {
 
             let rpc_service = self.get_rpc_service(chain)?;
 
-            let result: Result<(MultiSendRawTransactionResult,), _> = call_with_payment128(
+            let result: Result<(Result<SendRawTransactionStatus, RpcError>,), _> = call_with_payment128(
                 self.evm_rpc_canister,
                 "eth_sendRawTransaction",
                 (rpc_service, None::<()>, raw_tx.to_string()),
@@ -363,42 +342,30 @@ impl EvmRpcExecutor {
             .await;
 
             match result {
-                Ok((send_result,)) => {
-                    match send_result {
-                        MultiSendRawTransactionResult::Consistent(send_result) => {
-                            match send_result {
-                                evm_rpc_canister_types::SendRawTransactionResult::Ok(status) => {
-                                    match status {
-                                        SendRawTransactionStatus::Ok(Some(_)) => {
-                                            ic_cdk::println!("Transaction sent successfully");
-                                            return Ok(());
-                                        }
-                                        SendRawTransactionStatus::Ok(None) => {
-                                            last_error = "No transaction hash returned".to_string();
-                                        }
-                                        SendRawTransactionStatus::NonceTooLow => {
-                                            // Don't retry on nonce too low - this is a permanent error
-                                            return Err("Nonce too low".to_string());
-                                        }
-                                        SendRawTransactionStatus::NonceTooHigh => {
-                                            last_error = "Nonce too high".to_string();
-                                        }
-                                        SendRawTransactionStatus::InsufficientFunds => {
-                                            // Don't retry on insufficient funds
-                                            return Err("Insufficient funds".to_string());
-                                        }
-                                    }
-                                }
-                                evm_rpc_canister_types::SendRawTransactionResult::Err(e) => {
-                                    last_error = format!("RPC error: {:?}", e);
-                                }
-                            }
+                Ok((Ok(status),)) => {
+                    match status {
+                        SendRawTransactionStatus::Ok(Some(_)) => {
+                            ic_cdk::println!("Transaction sent successfully");
+                            return Ok(());
                         }
-                        MultiSendRawTransactionResult::Inconsistent(results) => {
-                            last_error = format!("Inconsistent results from RPC providers: {:?}", results);
-                            // Retry on inconsistent results - this is often transient
+                        SendRawTransactionStatus::Ok(None) => {
+                            last_error = "No transaction hash returned".to_string();
+                        }
+                        SendRawTransactionStatus::NonceTooLow => {
+                            // Don't retry on nonce too low - this is a permanent error
+                            return Err("Nonce too low".to_string());
+                        }
+                        SendRawTransactionStatus::NonceTooHigh => {
+                            last_error = "Nonce too high".to_string();
+                        }
+                        SendRawTransactionStatus::InsufficientFunds => {
+                            // Don't retry on insufficient funds
+                            return Err("Insufficient funds".to_string());
                         }
                     }
+                }
+                Ok((Err(e),)) => {
+                    last_error = format!("RPC error: {:?}", e);
                 }
                 Err(e) => {
                     last_error = format!("Failed to call eth_sendRawTransaction: {:?}", e);
@@ -423,7 +390,7 @@ impl EvmRpcExecutor {
             "sepolia" => {
                 // Use custom RPC with Alchemy API key for better consistency
                 Ok(RpcServices::Custom {
-                    chainId: 11155111, // Sepolia chain ID
+                    chain_id: 11155111, // Sepolia chain ID
                     services: vec![RpcApi {
                         url: crate::config::get_alchemy_sepolia_url(),
                         headers: None,
@@ -460,6 +427,13 @@ impl EvmRpcExecutor {
         }
 
         Ok(U256::from_big_endian(&bytes))
+    }
+
+    /// Convert Nat256 to U256
+    fn nat256_to_u256(&self, n: &Nat256) -> Result<U256, String> {
+        // Parse Nat256 as string and convert to U256
+        let s = n.to_string();
+        U256::from_dec_str(&s).map_err(|e| format!("Failed to convert Nat256 to U256: {:?}", e))
     }
 
     /// Get ETH balance of an address
@@ -536,7 +510,7 @@ impl EvmRpcExecutor {
             let rpc_services = self.get_rpc_services(chain)?;
 
             // Call eth_getTransactionReceipt
-            let result: Result<(MultiGetTransactionReceiptResult,), _> = call_with_payment128(
+            let result: Result<(Result<Option<TransactionReceipt>, RpcError>,), _> = call_with_payment128(
                 self.evm_rpc_canister,
                 "eth_getTransactionReceipt",
                 (rpc_services, None::<RpcConfig>, tx_hash.to_string()),
@@ -545,23 +519,16 @@ impl EvmRpcExecutor {
             .await;
 
             match result {
-                Ok((MultiGetTransactionReceiptResult::Consistent(receipt_result),)) => {
-                    match receipt_result {
-                        GetTransactionReceiptResult::Ok(Some(_receipt)) => {
-                            ic_cdk::println!("✅ Transaction confirmed in block!");
-                            return Ok(());
-                        }
-                        GetTransactionReceiptResult::Ok(None) => {
-                            // Receipt is None means transaction is still pending
-                            ic_cdk::println!("  ⏳ Still pending...");
-                        }
-                        GetTransactionReceiptResult::Err(e) => {
-                            ic_cdk::println!("  ❌ Receipt error: {:?}", e);
-                        }
-                    }
+                Ok((Ok(Some(_receipt)),)) => {
+                    ic_cdk::println!("✅ Transaction confirmed in block!");
+                    return Ok(());
                 }
-                Ok((MultiGetTransactionReceiptResult::Inconsistent(_),)) => {
-                    ic_cdk::println!("  ⚠️ Inconsistent receipt, will retry...");
+                Ok((Ok(None),)) => {
+                    // Receipt is None means transaction is still pending
+                    ic_cdk::println!("  ⏳ Still pending...");
+                }
+                Ok((Err(e),)) => {
+                    ic_cdk::println!("  ❌ Receipt error: {:?}", e);
                 }
                 Err((code, msg)) => {
                     ic_cdk::println!("  ❌ Receipt check error: {:?}: {}", code, msg);

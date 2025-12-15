@@ -198,6 +198,22 @@ export class ChainGuardClient {
     });
   }
 
+  /**
+   * Helper: Request a Bitcoin transfer action
+   * @param to - Bitcoin address (P2PKH, P2WPKH, or P2TR)
+   * @param amount - Amount in satoshis
+   * @param network - "Bitcoin" for mainnet or "BitcoinTestnet" for testnet
+   */
+  async bitcoinTransfer(
+    to: string,
+    amount: bigint,
+    network: string = 'BitcoinTestnet'
+  ): Promise<ActionResult> {
+    return await this.requestAction({
+      BitcoinTransfer: { to, amount, network },
+    });
+  }
+
   // ============ Threshold Signing ============
 
   /**
@@ -272,5 +288,22 @@ export class ChainGuardClient {
    */
   async resume(): Promise<Result> {
     return await this.actor.resume();
+  }
+
+  // ============ Address Management ============
+
+  /**
+   * Get the Ethereum address for this canister
+   */
+  async getEthAddress(): Promise<Result<string>> {
+    return await this.actor.get_eth_address();
+  }
+
+  /**
+   * Get the Bitcoin address for this canister
+   * @param network - "Bitcoin" for mainnet or "BitcoinTestnet" for testnet
+   */
+  async getBitcoinAddress(network: string = 'BitcoinTestnet'): Promise<Result<string>> {
+    return await this.actor.get_bitcoin_address(network);
   }
 }

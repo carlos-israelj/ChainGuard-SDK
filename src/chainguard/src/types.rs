@@ -79,6 +79,11 @@ pub enum Action {
         spender: String,
         amount: u64,
     },
+    BitcoinTransfer {
+        to: String,         // Bitcoin address (P2PKH, P2WPKH, P2TR)
+        amount: u64,        // Amount in satoshis
+        network: String,    // "Bitcoin" or "BitcoinTestnet"
+    },
 }
 
 // ============== THRESHOLD SIGNING ==============

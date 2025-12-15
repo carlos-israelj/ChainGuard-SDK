@@ -37,10 +37,17 @@ export interface ApproveTokenAction {
   amount: bigint;
 }
 
+export interface BitcoinTransferAction {
+  to: string;
+  amount: bigint;
+  network: string;
+}
+
 export type Action =
   | { Swap: SwapAction }
   | { Transfer: TransferAction }
-  | { ApproveToken: ApproveTokenAction };
+  | { ApproveToken: ApproveTokenAction }
+  | { BitcoinTransfer: BitcoinTransferAction };
 
 export interface ExecutionResult {
   success: boolean;
@@ -167,4 +174,6 @@ export interface ChainGuardService {
 
   // Info
   get_config: () => Promise<[] | [ChainGuardConfig]>;
+  get_eth_address: () => Promise<Result<string>>;
+  get_bitcoin_address: (network: string) => Promise<Result<string>>;
 }

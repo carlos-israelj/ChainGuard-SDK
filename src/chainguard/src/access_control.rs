@@ -139,6 +139,7 @@ impl AccessControl {
             Action::Swap { amount_in, .. } => *amount_in,
             Action::Transfer { amount, .. } => *amount,
             Action::ApproveToken { amount, .. } => *amount,
+            Action::BitcoinTransfer { amount, .. } => *amount,
         }
     }
 
@@ -147,6 +148,7 @@ impl AccessControl {
             Action::Swap { chain, .. } => chain.clone(),
             Action::Transfer { chain, .. } => chain.clone(),
             Action::ApproveToken { chain, .. } => chain.clone(),
+            Action::BitcoinTransfer { network, .. } => network.clone(),
         }
     }
 
@@ -155,6 +157,7 @@ impl AccessControl {
             Action::Swap { token_in, token_out, .. } => vec![token_in.clone(), token_out.clone()],
             Action::Transfer { token, .. } => vec![token.clone()],
             Action::ApproveToken { token, .. } => vec![token.clone()],
+            Action::BitcoinTransfer { .. } => vec!["BTC".to_string()],
         }
     }
 
