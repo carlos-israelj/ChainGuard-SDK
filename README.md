@@ -33,13 +33,13 @@ ChainGuard SDK enables AI agents to execute multi-chain transactions with enterp
 | Component | Network | Canister/Contract ID | Explorer |
 |-----------|---------|---------------------|----------|
 | **ChainGuard Canister** | IC Mainnet | `foxtk-ziaaa-aaaai-atthq-cai` | [Dashboard](https://dashboard.internetcomputer.org/canister/foxtk-ziaaa-aaaai-atthq-cai) |
+| **Frontend Dashboard** | IC Mainnet | `ikzzy-myaaa-aaaai-atvra-cai` | [Live App](https://ikzzy-myaaa-aaaai-atvra-cai.icp0.io/) |
 | **ETH Address (Sepolia)** | Sepolia Testnet | `0xfdd0e2016079951225bd88a41b1b7295aa995cad` | [Etherscan](https://sepolia.etherscan.io/address/0xfdd0e2016079951225bd88a41b1b7295aa995cad) |
-| **Frontend Dashboard** | Localhost | `http://localhost:3000` | Development |
 
 **Verified Transactions:**
-- ✅ **ETH Transfer**: [0xfd8d8b...240ad](https://sepolia.etherscan.io/tx/0xfd8d8b026020e08b06f575702661a76a074c6e34d23f326d84395fec0f9240ad)
-- ✅ **ETH→USDC Swap**: [0x9c30a3...f4db9](https://sepolia.etherscan.io/tx/0x9c30a38f4e0f58bc1dd29c34c5e3f7c31d8dc3f7bab8d31dc0e3ec5eae0f4db9)
-- ✅ **USDC→ETH Swap**: [0xbfbdab...8652a](https://sepolia.etherscan.io/tx/0xbfbdab70dd24fcb72c70b60f94096c67ca5cf949e3e99d201ba088377ed8652a)
+- ✅ **ETH Transfer**: [0xb61cea...e1e0](https://sepolia.etherscan.io/tx/0xb61cea0b619a806c15d344b4940bfef789595e4af7bf312ec81435037077e308) - Latest test (Dec 2024)
+- ✅ **ETH→USDC Swap**: [0x3f2d4d...e1e0](https://sepolia.etherscan.io/tx/0x3f2d4d85c18349b1d738c0286f4479f58c2123078414161c5491550d41e2e1e0) - Universal Router V3
+- ✅ **USDC→ETH Swap**: [0x6cbdbf...f514](https://sepolia.etherscan.io/tx/0x6cbdbf921d100cb9b9ce5c3df223b05e60c4f291a09678b2d9d5fbb42112f514) - Permit2 Integration
 
 ---
 
@@ -458,6 +458,12 @@ dfx deploy chainguard --network ic
 ```
 
 **2. Frontend Dashboard**
+
+**Live on IC Mainnet:**
+- Visit: https://ikzzy-myaaa-aaaai-atvra-cai.icp0.io/
+- No installation required - fully deployed and accessible
+
+**Local Development:**
 ```bash
 cd frontend
 npm install

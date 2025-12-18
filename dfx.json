@@ -4,6 +4,12 @@
       "type": "rust",
       "candid": "src/chainguard/chainguard.did",
       "package": "chainguard"
+    },
+    "frontend": {
+      "type": "assets",
+      "source": [
+        "frontend/out"
+      ]
     }
   },
   "defaults": {
